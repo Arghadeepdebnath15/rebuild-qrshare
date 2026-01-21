@@ -34,7 +34,7 @@ interface FolderStructureProps {
   onFolderSelect: (folderId: string) => void;
 }
 
-const FolderStructure: React.FC<FolderStructureProps> = ({ onFolderSelect }) => {
+const FolderStructure: React.FC<FolderStructureProps> = ({ onFolderSelect }: FolderStructureProps) => {
   const [folders, setFolders] = useState<Folder[]>([
     { id: 'default', name: 'My Files', files: [] }
   ]);
@@ -58,5 +58,19 @@ const FolderStructure: React.FC<FolderStructureProps> = ({ onFolderSelect }) => 
     fetchFolders();
   }, [fetchFolders]);
 
-  // ... existing code ...
+  return (
+    <Box>
+      <Typography variant="h6">Folders</Typography>
+      <List>
+        {folders.map((folder) => (
+          <ListItem key={folder.id} onClick={() => onFolderSelect(folder.id)}>
+            <ListItemIcon>
+              <FolderIcon />
+            </ListItemIcon>
+            <ListItemText primary={folder.name} />
+          </ListItem>
+        ))}
+      </List>
+    </Box>
+  );
 }; 

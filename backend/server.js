@@ -52,7 +52,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB connection string directly in code
-const MONGODB_URI = 'mongodb+srv://2023422375arghadeep:SjEckjBfyu8ECtBD@cluster0.y1rybwu.mongodb.net/qr-file-share?retryWrites=true&w=majority';
+const MONGODB_URI = 'mongodb+srv://debnatharghadeep_db_user:dQ2zQWVVKA3KWIYC@cluster0.2glreqr.mongodb.net/?appName=Cluster0';
 
 const mongooseOptions = {
     useNewUrlParser: true,
