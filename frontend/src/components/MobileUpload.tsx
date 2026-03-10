@@ -28,8 +28,16 @@ const MobileUpload: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const getDeviceId = () => {
+        // 1. Check URL parameters (from QR code)
+        const params = new URLSearchParams(window.location.search);
+        const urlDeviceId = params.get('deviceId');
+        if (urlDeviceId && urlDeviceId !== 'null' && urlDeviceId !== 'undefined') {
+            return urlDeviceId;
+        }
+
+        // 2. Check localStorage
         let deviceId = localStorage.getItem('deviceId');
-        if (!deviceId) {
+        if (!deviceId || deviceId === 'null' || deviceId === 'undefined') {
             deviceId = 'device_' + Math.random().toString(36).substr(2, 9);
             localStorage.setItem('deviceId', deviceId);
         }
