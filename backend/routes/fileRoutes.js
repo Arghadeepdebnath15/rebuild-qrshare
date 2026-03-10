@@ -242,8 +242,13 @@ router.post('/upload-chunk', upload.single('chunk'), async (req, res) => {
         }
 
         const chunkDir = path.join(uploadsDir, 'chunks', identifier);
-        if (!fs.existsSync(chunkDir)) {
-            fs.mkdirSync(chunkDir, { recursive: true });
+        try {
+            if (!fs.existsSync(chunkDir)) {
+                fs.mkdirSync(chunkDir, { recursive: true });
+            }
+        } catch (e) {
+            // Likely another parallel request already created it
+            if (!fs.existsSync(chunkDir)) throw e;
         }
 
         // Move the uploaded chunk to the specific chunk directory

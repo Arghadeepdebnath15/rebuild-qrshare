@@ -114,13 +114,16 @@ const FileUpload: React.FC = () => {
 
   const uploadFile = useCallback(async (file: File) => {
     const deviceId = getDeviceId();
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const identifier = `${deviceId}-${Date.now()}`;
+    const CONCURRENCY = 3;
 
     try {
-      // 1. Upload Chunks Sequentially
-      for (let chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
+      const chunks = Array.from({ length: totalChunks }, (_, i) => i + 1);
+      let completedChunks = 0;
+
+      const uploadChunk = async (chunkNumber: number) => {
         const start = (chunkNumber - 1) * CHUNK_SIZE;
         const end = Math.min(file.size, start + CHUNK_SIZE);
         const chunk = file.slice(start, end);
@@ -142,9 +145,15 @@ const FileUpload: React.FC = () => {
           withCredentials: true
         });
 
-        // Update progress simulating that this single file is uploading globally
-        const progress = Math.round((chunkNumber / totalChunks) * 100);
+        completedChunks++;
+        const progress = Math.round((completedChunks / totalChunks) * 100);
         setUploadProgress(progress);
+      };
+
+      // 1. Upload Chunks in Parallel (concurrency limit)
+      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+        const batch = chunks.slice(i, i + CONCURRENCY).map(n => uploadChunk(n));
+        await Promise.all(batch);
       }
 
       // 2. Complete Upload
