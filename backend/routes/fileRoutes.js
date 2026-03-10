@@ -70,32 +70,32 @@ const getBaseUrl = (req) => {
     return `${protocol}://${host}`;
 };
 
-// Get recent files
+// Get recent files (Uploaded Files section - always device specific)
 router.get('/recent', async (req, res) => {
     try {
         const { deviceId } = req.query;
-        let query = req.supabase
-            .from('files')
-            .select('*');
-
-        if (deviceId) {
-            // Join with device_history to get specific device's internal uploads
-            const { data: history, error: historyError } = await req.supabase
-                .from('device_history')
-                .select('file_id')
-                .eq('device_id', deviceId)
-                .eq('is_external', false);
-
-            if (historyError) throw historyError;
-
-            const fileIds = history.map(h => h.file_id);
-            if (fileIds.length === 0) {
-                return res.json([]);
-            }
-            query = query.in('id', fileIds);
+        if (!deviceId) {
+            return res.json([]); // Don't return global files for the "Uploaded" section
         }
 
-        const { data: files, error } = await query
+        // Get this device's internal (is_external: false) uploads
+        const { data: history, error: historyError } = await req.supabase
+            .from('device_history')
+            .select('file_id')
+            .eq('device_id', deviceId)
+            .eq('is_external', false);
+
+        if (historyError) throw historyError;
+
+        const fileIds = history.map(h => h.file_id);
+        if (fileIds.length === 0) {
+            return res.json([]);
+        }
+
+        const { data: files, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .in('id', fileIds)
             .order('upload_date', { ascending: false })
             .limit(10);
 
@@ -921,7 +921,8 @@ router.post('/add-to-recent/:deviceId', async (req, res) => {
             .from('device_history')
             .upsert([{
                 device_id: deviceId,
-                file_id: fileId
+                file_id: fileId,
+                is_external: false // Manually added files are always internal uploads
             }], { onConflict: 'device_id,file_id' });
 
         if (error) throw error;
