@@ -1,5 +1,5 @@
 // API Configuration - Use relative path for proxy
-export const API_URL = process.env.REACT_APP_API_URL || '';
+export const API_URL = process.env.REACT_APP_API_URL || 'https://qr-file-backend.onrender.com';
 
 // Export additional configuration
 export const CONFIG = {
