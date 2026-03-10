@@ -14,7 +14,7 @@ import NoFilesIcon from '@mui/icons-material/FileCopy';
 import { useTheme } from '@mui/material/styles';
 
 interface FileInfo {
-  _id: string;
+  id: string;
   originalName: string;
   filename: string;
   size: number;
@@ -42,8 +42,8 @@ const RecentFiles: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const deviceId = getDeviceId();
-      const response = await fetch(`/api/files/recent/${deviceId}`);
+      // Fetch ALL recent files (not device-specific) so uploads from mobile appear on main page
+      const response = await fetch(`/api/files/recent`);
       if (!response.ok) {
         throw new Error('Failed to fetch recent files');
       }
@@ -58,6 +58,13 @@ const RecentFiles: React.FC = () => {
 
   React.useEffect(() => {
     fetchRecentFiles();
+
+    // Auto-refresh every 3 seconds to show new uploads from mobile
+    const interval = setInterval(() => {
+      fetchRecentFiles();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const formatDate = (dateString: string) => {
@@ -78,8 +85,8 @@ const RecentFiles: React.FC = () => {
             maxHeight: '80vh',
           }}
         >
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               p: 2,
               borderBottom: 1,
               borderColor: 'divider',
@@ -112,18 +119,18 @@ const RecentFiles: React.FC = () => {
                 background: 'transparent',
               },
               '&::-webkit-scrollbar-thumb': {
-                background: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.2)' 
+                background: theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.2)'
                   : 'rgba(0, 0, 0, 0.2)',
                 borderRadius: '4px',
                 '&:hover': {
-                  background: theme.palette.mode === 'dark' 
-                    ? 'rgba(255, 255, 255, 0.3)' 
+                  background: theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.3)'
                     : 'rgba(0, 0, 0, 0.3)',
                 },
               },
               scrollbarWidth: 'thin',
-              scrollbarColor: theme.palette.mode === 'dark' 
+              scrollbarColor: theme.palette.mode === 'dark'
                 ? 'rgba(255, 255, 255, 0.2) transparent'
                 : 'rgba(0, 0, 0, 0.2) transparent',
             }}
@@ -154,11 +161,11 @@ const RecentFiles: React.FC = () => {
                     gap: 1.5,
                   }}
                 >
-                  <NoFilesIcon 
-                    sx={{ 
-                      fontSize: 48, 
+                  <NoFilesIcon
+                    sx={{
+                      fontSize: 48,
                       color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
-                    }} 
+                    }}
                   />
                   <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 500 }}>
                     No files uploaded yet
@@ -172,7 +179,7 @@ const RecentFiles: React.FC = () => {
               <List sx={{ py: 0 }}>
                 {files.map((file, index) => (
                   <Grow
-                    key={file._id}
+                    key={file.id}
                     in
                     timeout={300 + index * 100}
                   >
@@ -184,7 +191,7 @@ const RecentFiles: React.FC = () => {
                           px: { xs: 2, sm: 3 },
                           transition: 'all 0.2s ease',
                           '&:hover': {
-                            bgcolor: theme.palette.mode === 'dark' 
+                            bgcolor: theme.palette.mode === 'dark'
                               ? 'rgba(255, 255, 255, 0.08)'
                               : 'rgba(0, 0, 0, 0.04)',
                             transform: 'translateY(-1px)',
@@ -192,6 +199,8 @@ const RecentFiles: React.FC = () => {
                         }}
                       >
                         <ListItemText
+                          primaryTypographyProps={{ component: 'div' }}
+                          secondaryTypographyProps={{ component: 'div' }}
                           primary={
                             <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1 }}>
                               {file.originalName}
@@ -199,10 +208,10 @@ const RecentFiles: React.FC = () => {
                           }
                           secondary={
                             <Box sx={{ mt: 1 }}>
-                              <Typography 
-                                variant="caption" 
-                                display="block" 
-                                sx={{ 
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                sx={{
                                   mt: 1,
                                   color: 'text.secondary',
                                 }}
@@ -237,8 +246,8 @@ const RecentFiles: React.FC = () => {
             maxHeight: '80vh',
           }}
         >
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               p: 2,
               borderBottom: 1,
               borderColor: 'divider',
@@ -271,18 +280,18 @@ const RecentFiles: React.FC = () => {
                 background: 'transparent',
               },
               '&::-webkit-scrollbar-thumb': {
-                background: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.2)' 
+                background: theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.2)'
                   : 'rgba(0, 0, 0, 0.2)',
                 borderRadius: '4px',
                 '&:hover': {
-                  background: theme.palette.mode === 'dark' 
-                    ? 'rgba(255, 255, 255, 0.3)' 
+                  background: theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.3)'
                     : 'rgba(0, 0, 0, 0.3)',
                 },
               },
               scrollbarWidth: 'thin',
-              scrollbarColor: theme.palette.mode === 'dark' 
+              scrollbarColor: theme.palette.mode === 'dark'
                 ? 'rgba(255, 255, 255, 0.2) transparent'
                 : 'rgba(0, 0, 0, 0.2) transparent',
             }}
@@ -313,11 +322,11 @@ const RecentFiles: React.FC = () => {
                     gap: 1.5,
                   }}
                 >
-                  <NoFilesIcon 
-                    sx={{ 
-                      fontSize: 48, 
+                  <NoFilesIcon
+                    sx={{
+                      fontSize: 48,
                       color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
-                    }} 
+                    }}
                   />
                   <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 500 }}>
                     No files uploaded yet
@@ -331,7 +340,7 @@ const RecentFiles: React.FC = () => {
               <List sx={{ py: 0 }}>
                 {files.map((file, index) => (
                   <Grow
-                    key={file._id}
+                    key={file.id}
                     in
                     timeout={300 + index * 100}
                   >
@@ -343,7 +352,7 @@ const RecentFiles: React.FC = () => {
                           px: { xs: 2, sm: 3 },
                           transition: 'all 0.2s ease',
                           '&:hover': {
-                            bgcolor: theme.palette.mode === 'dark' 
+                            bgcolor: theme.palette.mode === 'dark'
                               ? 'rgba(255, 255, 255, 0.08)'
                               : 'rgba(0, 0, 0, 0.04)',
                             transform: 'translateY(-1px)',
@@ -351,6 +360,8 @@ const RecentFiles: React.FC = () => {
                         }}
                       >
                         <ListItemText
+                          primaryTypographyProps={{ component: 'div' }}
+                          secondaryTypographyProps={{ component: 'div' }}
                           primary={
                             <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1 }}>
                               {file.originalName}
@@ -358,10 +369,10 @@ const RecentFiles: React.FC = () => {
                           }
                           secondary={
                             <Box sx={{ mt: 1 }}>
-                              <Typography 
-                                variant="caption" 
-                                display="block" 
-                                sx={{ 
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                sx={{
                                   mt: 1,
                                   color: 'text.secondary',
                                 }}
@@ -395,8 +406,8 @@ const RecentFiles: React.FC = () => {
           maxHeight: '80vh',
         }}
       >
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             p: 2,
             borderBottom: 1,
             borderColor: 'divider',
@@ -429,18 +440,18 @@ const RecentFiles: React.FC = () => {
               background: 'transparent',
             },
             '&::-webkit-scrollbar-thumb': {
-              background: theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.2)' 
+              background: theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.2)'
                 : 'rgba(0, 0, 0, 0.2)',
               borderRadius: '4px',
               '&:hover': {
-                background: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.3)' 
+                background: theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.3)'
                   : 'rgba(0, 0, 0, 0.3)',
               },
             },
             scrollbarWidth: 'thin',
-            scrollbarColor: theme.palette.mode === 'dark' 
+            scrollbarColor: theme.palette.mode === 'dark'
               ? 'rgba(255, 255, 255, 0.2) transparent'
               : 'rgba(0, 0, 0, 0.2) transparent',
           }}
@@ -471,11 +482,11 @@ const RecentFiles: React.FC = () => {
                   gap: 1.5,
                 }}
               >
-                <NoFilesIcon 
-                  sx={{ 
-                    fontSize: 48, 
+                <NoFilesIcon
+                  sx={{
+                    fontSize: 48,
                     color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
-                  }} 
+                  }}
                 />
                 <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 500 }}>
                   No files uploaded yet
@@ -489,7 +500,7 @@ const RecentFiles: React.FC = () => {
             <List sx={{ py: 0 }}>
               {files.map((file, index) => (
                 <Grow
-                  key={file._id}
+                  key={file.id}
                   in
                   timeout={300 + index * 100}
                 >
@@ -501,7 +512,7 @@ const RecentFiles: React.FC = () => {
                         px: { xs: 2, sm: 3 },
                         transition: 'all 0.2s ease',
                         '&:hover': {
-                          bgcolor: theme.palette.mode === 'dark' 
+                          bgcolor: theme.palette.mode === 'dark'
                             ? 'rgba(255, 255, 255, 0.08)'
                             : 'rgba(0, 0, 0, 0.04)',
                           transform: 'translateY(-1px)',
@@ -509,6 +520,8 @@ const RecentFiles: React.FC = () => {
                       }}
                     >
                       <ListItemText
+                        primaryTypographyProps={{ component: 'div' }}
+                        secondaryTypographyProps={{ component: 'div' }}
                         primary={
                           <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1 }}>
                             {file.originalName}
@@ -516,10 +529,10 @@ const RecentFiles: React.FC = () => {
                         }
                         secondary={
                           <Box sx={{ mt: 1 }}>
-                            <Typography 
-                              variant="caption" 
-                              display="block" 
-                              sx={{ 
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
                                 mt: 1,
                                 color: 'text.secondary',
                               }}

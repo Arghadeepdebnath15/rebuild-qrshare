@@ -1,10 +1,10 @@
 import React, { useCallback } from 'react';
-import { 
-  Container, 
-  ThemeProvider, 
-  createTheme, 
-  Tabs, 
-  Tab, 
+import {
+  Container,
+  ThemeProvider,
+  createTheme,
+  Tabs,
+  Tab,
   Box,
   Paper,
   Typography,
@@ -17,6 +17,7 @@ import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
 import NightlightRoundIcon from '@mui/icons-material/NightlightRound';
 import FileUpload from './components/FileUpload';
 import UploadQRCode from './components/UploadQRCode';
+import UploadedFiles from './components/UploadedFiles';
 import ReceivedFiles from './components/ReceivedFiles';
 import Blog from './components/Blog';
 
@@ -25,6 +26,12 @@ const poppinsFont = document.createElement('link');
 poppinsFont.rel = 'stylesheet';
 poppinsFont.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap';
 document.head.appendChild(poppinsFont);
+
+// Initialize device ID if not present
+if (!localStorage.getItem('deviceId')) {
+  localStorage.setItem('deviceId', 'device_' + Math.random().toString(36).substr(2, 9));
+}
+
 
 function App() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
@@ -123,7 +130,7 @@ function App() {
       <Box
         sx={{
           minHeight: '100vh',
-          background: mode === 'light' 
+          background: mode === 'light'
             ? 'linear-gradient(135deg, #f5f7ff 0%, #ffffff 100%)'
             : 'linear-gradient(135deg, #121212 0%, #1e1e1e 100%)',
           py: 4,
@@ -154,18 +161,18 @@ function App() {
             }}
           >
             {mode === 'dark' ? (
-              <WbSunnyRoundedIcon 
-                sx={{ 
+              <WbSunnyRoundedIcon
+                sx={{
                   color: '#ffd700',
                   fontSize: { xs: 20, sm: 24 },
-                }} 
+                }}
               />
             ) : (
-              <NightlightRoundIcon 
-                sx={{ 
+              <NightlightRoundIcon
+                sx={{
                   color: '#5c6bc0',
                   fontSize: { xs: 20, sm: 24 },
-                }} 
+                }}
               />
             )}
           </IconButton>
@@ -186,10 +193,10 @@ function App() {
             }}
           >
             <Box sx={{ textAlign: 'center', mb: 4 }}>
-              <Typography 
-                variant="h3" 
-                component="h1" 
-                gutterBottom 
+              <Typography
+                variant="h3"
+                component="h1"
+                gutterBottom
                 sx={{
                   background: mode === 'light'
                     ? 'linear-gradient(45deg, #2962ff 30%, #7c4dff 90%)'
@@ -201,12 +208,12 @@ function App() {
               >
                 QR File Transfer
               </Typography>
-              <Typography 
-                variant="h6" 
-                component="h2" 
+              <Typography
+                variant="h6"
+                component="h2"
                 color="text.secondary"
-                sx={{ 
-                  maxWidth: '600px', 
+                sx={{
+                  maxWidth: '600px',
                   margin: '0 auto',
                   opacity: 0.8,
                 }}
@@ -215,20 +222,19 @@ function App() {
               </Typography>
             </Box>
 
-            <Box 
-              sx={{ 
-                borderBottom: 1, 
+            <Box
+              sx={{
+                borderBottom: 1,
                 borderColor: 'divider',
                 mb: 4,
               }}
             >
-              <Tabs 
-                value={tabValue} 
-                onChange={handleTabChange} 
+              <Tabs
+                value={tabValue}
+                onChange={handleTabChange}
                 centered
               >
                 <Tab label="Upload File" />
-                <Tab label="Recent Files" />
                 <Tab label="Blog" />
               </Tabs>
             </Box>
@@ -237,10 +243,14 @@ function App() {
               <>
                 <FileUpload />
                 <UploadQRCode />
+                <Box sx={{ mt: 2, mb: 4 }}>
+                  <ReceivedFiles />
+                </Box>
+                {/* All Uploaded Files Section - Always Visible on Main Page */}
+                <UploadedFiles />
               </>
             )}
-            {tabValue === 1 && <ReceivedFiles />}
-            {tabValue === 2 && <Blog />}
+            {tabValue === 1 && <Blog />}
           </Paper>
         </Container>
       </Box>

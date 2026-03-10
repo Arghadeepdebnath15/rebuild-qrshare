@@ -3,8 +3,6 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
-const File = require('../models/File');
-const RecentHistory = require('../models/RecentHistory');
 const fs = require('fs');
 
 // Ensure uploads directory exists
@@ -37,7 +35,7 @@ const upload = multer({
     fileFilter: function (req, file, cb) {
         // List of allowed file types
         const filetypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|zip|rar|txt|mp3|mp4|mov|avi|wav|psd|ai|eps|svg|webp|ico|json|js|css|html|xml|csv|ppt|pptx|odt|ods|odp|7z|tar|gz|bz2|tiff|bmp|rtf|ogg|webm|m4a|wma|aac|flac|mkv|wmv|mpg|mpeg|3gp|py|java|cpp|h|c|sql|md|yml|yaml|conf|ini|sh|bat|ps1|log/;
-        
+
         // Check both mimetype and file extension
         const mimetype = filetypes.test(file.mimetype.toLowerCase());
         const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
@@ -45,7 +43,7 @@ const upload = multer({
         if (mimetype || extname) {
             return cb(null, true);
         }
-        
+
         cb(new Error(`File type '${path.extname(file.originalname).toLowerCase()}' is not supported. Supported file types: ${filetypes.toString().replace(/\//g, '')}`));
     }
 });
@@ -54,29 +52,49 @@ const upload = multer({
 const getBaseUrl = (req) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.headers['x-forwarded-host'] || req.get('host');
+
+    // If we're on localhost and not in production, use the local IP so QR codes work on WiFi
+    if ((host.includes('localhost') || host.includes('127.0.0.1')) && process.env.NODE_ENV !== 'production') {
+        const { networkInterfaces } = require('os');
+        const nets = networkInterfaces();
+        for (const name of Object.keys(nets)) {
+            for (const net of nets[name]) {
+                if (net.family === 'IPv4' && !net.internal) {
+                    const port = host.split(':')[1] || '';
+                    return `${protocol}://${net.address}${port ? ':' + port : ''}`;
+                }
+            }
+        }
+    }
+
     return `${protocol}://${host}`;
 };
 
 // Get recent files
 router.get('/recent', async (req, res) => {
     try {
-        const files = await File.find()
-            .sort({ uploadDate: -1 })
+        const { data: files, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .order('upload_date', { ascending: false })
             .limit(10);
 
+        if (error) throw error;
+
         const baseUrl = getBaseUrl(req);
-        const filesWithUrls = files.map(file => {
-            const fileObj = file.toObject();
-            fileObj.url = `${baseUrl}/api/files/download/${file.filename}`;
-            return fileObj;
-        });
+        const filesWithUrls = files.map(file => ({
+            ...file,
+            originalName: file.original_name, // Map back for frontend compatibility
+            uploadDate: file.upload_date,
+            url: `${baseUrl}/api/files/download/${file.filename}`
+        }));
 
         res.json(filesWithUrls);
     } catch (error) {
         console.error('Error fetching recent files:', error);
-        res.status(500).json({ 
-            message: 'Error fetching recent files', 
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error' 
+        res.status(500).json({
+            message: 'Error fetching recent files',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 });
@@ -85,16 +103,25 @@ router.get('/recent', async (req, res) => {
 router.get('/recent/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
-        let history = await RecentHistory.findOne({ deviceId }).populate('fileIds');
-        
-        if (!history) {
-            history = { fileIds: [] };
-        }
+        const { data: history, error } = await req.supabase
+            .from('device_history')
+            .select('files(*)')
+            .eq('device_id', deviceId)
+            .eq('is_external', true)
+            .order('created_at', { ascending: false });
 
-        // Sort files by upload date, newest first
-        const files = history.fileIds.sort((a, b) => 
-            new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-        );
+        if (error) throw error;
+
+        const baseUrl = getBaseUrl(req);
+
+        const files = history
+            .filter(item => item && item.files)
+            .map(item => ({
+                ...item.files,
+                originalName: item.files.original_name,
+                uploadDate: item.files.upload_date,
+                url: `${baseUrl}/api/files/download/${item.files.filename}`
+            }));
 
         res.json(files);
     } catch (error) {
@@ -120,46 +147,49 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
         const baseUrl = getBaseUrl(req);
         const downloadUrl = `${baseUrl}/api/files/download/${req.file.filename}`;
-        
+
         // Generate QR code
         const qrCode = await QRCode.toDataURL(downloadUrl);
 
-        const file = new File({
-            filename: req.file.filename,
-            originalName: req.file.originalname,
-            path: req.file.path,
-            size: req.file.size,
-            mimetype: req.file.mimetype,
-            qrCode: qrCode,
-            uploadDate: new Date()
-        });
+        const { data: file, error: fileError } = await req.supabase
+            .from('files')
+            .insert([{
+                filename: req.file.filename,
+                original_name: req.file.originalname,
+                path: req.file.path,
+                size: req.file.size,
+                mimetype: req.file.mimetype,
+                qr_code: qrCode
+            }])
+            .select()
+            .single();
 
-        await file.save();
+        if (fileError) throw fileError;
 
         // Store in recent history if device ID is provided
         const deviceId = req.headers['device-id'];
         if (deviceId) {
-            let history = await RecentHistory.findOne({ deviceId });
-            if (!history) {
-                history = new RecentHistory({ deviceId, fileIds: [] });
-            }
-            history.fileIds.unshift(file._id);
-            if (history.fileIds.length > 10) {
-                history.fileIds.length = 10;
-            }
-            await history.save();
+            await req.supabase
+                .from('device_history')
+                .upsert([{
+                    device_id: deviceId,
+                    file_id: file.id,
+                    is_external: true
+                }], { onConflict: 'device_id,file_id' });
         }
 
-        res.status(201).json({ 
+        res.status(201).json({
             file: {
-                ...file.toObject(),
+                ...file,
+                originalName: file.original_name,
+                uploadDate: file.upload_date,
                 url: downloadUrl
-            }, 
-            qrCode 
+            },
+            qrCode
         });
     } catch (error) {
         console.error('Upload error:', error);
-        
+
         // Clean up uploaded file if database operation fails
         if (req.file && req.file.path) {
             try {
@@ -168,85 +198,274 @@ router.post('/upload', upload.single('file'), async (req, res) => {
                 console.error('Error cleaning up file:', unlinkError);
             }
         }
-        
-        res.status(500).json({ 
-            message: 'Error uploading file', 
+
+        res.status(500).json({
+            message: 'Error uploading file',
             error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 });
 
+// Upload Chunk Endpoint
+router.post('/upload-chunk', upload.single('chunk'), async (req, res) => {
+    try {
+        const { identifier, filename, chunkNumber, totalChunks } = req.body;
+
+        if (!req.file || !identifier || !filename) {
+            return res.status(400).json({ message: 'Missing chunk data' });
+        }
+
+        const chunkDir = path.join(uploadsDir, 'chunks', identifier);
+        if (!fs.existsSync(chunkDir)) {
+            fs.mkdirSync(chunkDir, { recursive: true });
+        }
+
+        // Move the uploaded chunk to the specific chunk directory
+        const chunkPath = path.join(chunkDir, `${chunkNumber}`);
+        fs.renameSync(req.file.path, chunkPath);
+
+        res.status(200).json({ message: 'Chunk uploaded successfully' });
+    } catch (error) {
+        console.error('Chunk upload error:', error);
+        res.status(500).json({ message: 'Error uploading chunk', error: error.message });
+    }
+});
+
+// Complete Chunked Upload Endpoint
+router.post('/upload-complete', async (req, res) => {
+    try {
+        const { identifier, filename, totalChunks, size, mimetype } = req.body;
+
+        if (!identifier || !filename || !totalChunks) {
+            return res.status(400).json({ message: 'Missing upload completion data' });
+        }
+
+        const chunkDir = path.join(uploadsDir, 'chunks', identifier);
+        const ext = path.extname(filename);
+        const name = path.basename(filename, ext).replace(/[^a-zA-Z0-9]/g, '_');
+        const finalFilename = `${name}-${Date.now()}${ext}`;
+        const finalPath = path.join(uploadsDir, finalFilename);
+
+        // Combine chunks
+        const writeStream = fs.createWriteStream(finalPath);
+
+        // Use a promise to handle stream writing asynchronously
+        await new Promise((resolve, reject) => {
+            let currentChunk = 1;
+
+            function appendNextChunk() {
+                if (currentChunk > totalChunks) {
+                    writeStream.end();
+                    resolve();
+                    return;
+                }
+
+                const chunkPath = path.join(chunkDir, `${currentChunk}`);
+                if (!fs.existsSync(chunkPath)) {
+                    reject(new Error(`Missing chunk ${currentChunk}`));
+                    return;
+                }
+
+                const data = fs.readFileSync(chunkPath);
+                writeStream.write(data);
+                fs.unlinkSync(chunkPath); // Delete chunk after reading
+
+                currentChunk++;
+                appendNextChunk();
+            }
+
+            appendNextChunk();
+        });
+
+        // Remove empty chunk directory
+        try {
+            fs.rmdirSync(chunkDir);
+        } catch (e) {
+            console.error('Error removing chunk dir:', e);
+        }
+
+        const baseUrl = getBaseUrl(req);
+        const downloadUrl = `${baseUrl}/api/files/download/${finalFilename}`;
+
+        // Generate QR code
+        const qrCode = await QRCode.toDataURL(downloadUrl);
+
+        const { data: file, error: fileError } = await req.supabase
+            .from('files')
+            .insert([{
+                filename: finalFilename,
+                original_name: filename,
+                path: finalPath,
+                size: parseInt(size),
+                mimetype: mimetype || 'application/octet-stream',
+                qr_code: qrCode
+            }])
+            .select()
+            .single();
+
+        if (fileError) throw fileError;
+
+        // Store in recent history if device ID is provided
+        const deviceId = req.headers['device-id'];
+        if (deviceId) {
+            await req.supabase
+                .from('device_history')
+                .upsert([{
+                    device_id: deviceId,
+                    file_id: file.id,
+                    is_external: true
+                }], { onConflict: 'device_id,file_id' });
+        }
+
+        res.status(201).json({
+            file: {
+                ...file,
+                originalName: file.original_name,
+                uploadDate: file.upload_date,
+                url: downloadUrl
+            },
+            qrCode
+        });
+
+    } catch (error) {
+        console.error('Upload completion error:', error);
+        res.status(500).json({ message: 'Error completing upload', error: error.message });
+    }
+});
+
 // Mobile upload page route
+
 router.get('/upload-page', (req, res) => {
     const baseUrl = getBaseUrl(req);
+    const deviceId = req.query.deviceId || '';
+
+    // Get the frontend URL - assume it's on the same host but port 3000
+    let mainPageUrl = baseUrl;
+    if (baseUrl.includes(':5055')) {
+        mainPageUrl = baseUrl.replace(':5055', ':3000');
+    } else {
+        mainPageUrl = baseUrl.replace(/:[0-9]+$/, '') + ':3000';
+    }
+
     // Send a simple HTML form for mobile uploads
     const html = `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Upload File</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+        <title>Upload File - QR File Transfer</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
+            * {
+                box-sizing: border-box;
+                -webkit-tap-highlight-color: transparent;
+            }
             body {
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                background-color: #f5f5f5;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
             .upload-container {
-                max-width: 500px;
-                margin: 0 auto;
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            h1 {
-                color: #1976d2;
-                text-align: center;
-            }
-            .file-input {
-                margin: 20px 0;
+                max-width: 450px;
                 width: 100%;
+                background: white;
+                padding: 30px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             }
-            .submit-btn {
-                background-color: #1976d2;
+            .header {
+                text-align: center;
+                margin-bottom: 25px;
+            }
+            .header h1 {
+                color: #333;
+                margin: 0 0 5px 0;
+                font-size: 24px;
+                font-weight: 600;
+            }
+            .header p {
+                color: #666;
+                margin: 0;
+                font-size: 14px;
+            }
+            .file-drop-area {
+                position: relative;
+                border: 2px dashed #667eea;
+                border-radius: 15px;
+                padding: 30px 20px;
+                text-align: center;
+                background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+                transition: all 0.3s ease;
+                cursor: pointer;
+                margin-bottom: 20px;
+            }
+            .file-drop-area:hover, .file-drop-area.dragover {
+                border-color: #667eea;
+                background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            }
+            .file-drop-area input[type="file"] {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                opacity: 0;
+                cursor: pointer;
+            }
+            .file-msg {
+                color: #666;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }
+            .file-name-display {
+                color: #667eea;
+                font-weight: 600;
+                font-size: 16px;
+                margin-top: 10px;
+            }
+            .upload-btn {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
-                padding: 10px 20px;
+                padding: 14px 28px;
                 border: none;
-                border-radius: 4px;
+                border-radius: 12px;
                 cursor: pointer;
                 width: 100%;
                 font-size: 16px;
+                font-weight: 600;
+                transition: transform 0.2s, box-shadow 0.2s;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
             }
-            .submit-btn:hover {
-                background-color: #1565c0;
+            .upload-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            }
+            .upload-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+                transform: none;
             }
             .status {
                 margin-top: 20px;
                 text-align: center;
-                color: #666;
+                padding: 15px;
+                border-radius: 10px;
+                display: none;
             }
-            .error {
-                color: #f44336;
+            .status.show {
+                display: block;
             }
-            .success {
-                color: #4caf50;
+            .status.success {
+                background: #d4edda;
+                color: #155724;
             }
-            .files-list {
-                margin-top: 20px;
-                border-top: 1px solid #eee;
-                padding-top: 20px;
-            }
-            .file-item {
-                padding: 10px;
-                border-bottom: 1px solid #eee;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .file-name {
-                font-weight: 500;
+            .status.error {
+                background: #f8d7da;
+                color: #721c24;
             }
             .loading {
                 display: none;
@@ -256,123 +475,292 @@ router.get('/upload-page', (req, res) => {
             .loading.show {
                 display: block;
             }
+            .spinner {
+                width: 40px;
+                height: 40px;
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid #667eea;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 10px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
             .qr-code {
                 text-align: center;
                 margin: 20px 0;
                 display: none;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 15px;
             }
             .qr-code.show {
                 display: block;
             }
             .qr-code img {
-                max-width: 200px;
+                max-width: 180px;
                 height: auto;
+                border-radius: 10px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            }
+            .qr-code p {
+                color: #666;
+                font-size: 14px;
+                margin-top: 15px;
+            }
+            .qr-code a {
+                color: #667eea;
+                text-decoration: none;
+                font-weight: 600;
+            }
+            .recent-files {
+                margin-top: 25px;
+                border-top: 1px solid #eee;
+                padding-top: 20px;
+            }
+            .recent-files h3 {
+                color: #333;
+                margin: 0 0 15px 0;
+                font-size: 16px;
+            }
+            .file-item {
+                padding: 12px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                margin-bottom: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .file-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .file-item-name {
+                color: #333;
+                font-weight: 500;
+                font-size: 14px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .file-item-size {
+                color: #999;
+                font-size: 12px;
+                margin-top: 2px;
+            }
+            .download-btn {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-decoration: none;
+                padding: 8px 16px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .view-main-btn {
+                display: block;
+                text-align: center;
+                margin-top: 20px;
+                padding: 12px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-decoration: none;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 14px;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            }
+            .view-main-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            }
+            .no-files {
+                text-align: center;
+                color: #999;
+                padding: 20px;
+                font-size: 14px;
             }
         </style>
     </head>
     <body>
         <div class="upload-container">
-            <h1>Upload File</h1>
-            <form id="uploadForm" enctype="multipart/form-data">
-                <input type="file" id="file" name="file" class="file-input" required>
-                <button type="submit" class="submit-btn">Upload</button>
-            </form>
-            <div id="loading" class="loading">
-                Uploading file...
+            <div class="header">
+                <h1>📤 Upload File</h1>
+                <p>File will appear on main page after upload</p>
             </div>
+            
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="file-drop-area" id="dropArea">
+                    <input type="file" id="file" name="file" required>
+                    <div class="file-msg">Tap to select or drag & drop</div>
+                    <div class="file-name-display" id="fileName"></div>
+                </div>
+                <button type="submit" class="upload-btn" id="uploadBtn">Upload File</button>
+            </form>
+            
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Uploading file...</p>
+            </div>
+            
             <div id="status" class="status"></div>
-            <div id="qrCode" class="qr-code"></div>
-            <div id="recentFiles" class="files-list"></div>
+            
+            <div id="qrCode" class="qr-code">
+                <img id="qrImage" src="" alt="QR Code">
+                <p>📱 Scan to download on other devices</p>
+                <p style="font-size: 12px;"><a href="#" id="downloadLink">Click to download file</a></p>
+            </div>
+            
+            <a href="${mainPageUrl}" class="view-main-btn">🏠 View Main Page (See Uploaded Files)</a>
         </div>
 
         <script>
             const baseUrl = '${baseUrl}';
+            const deviceId = '${deviceId}';
             const uploadForm = document.getElementById('uploadForm');
+            const fileInput = document.getElementById('file');
+            const fileNameDisplay = document.getElementById('fileName');
+            const dropArea = document.getElementById('dropArea');
+            const uploadBtn = document.getElementById('uploadBtn');
             const loadingDiv = document.getElementById('loading');
             const statusDiv = document.getElementById('status');
             const qrCodeDiv = document.getElementById('qrCode');
-            const recentFilesDiv = document.getElementById('recentFiles');
+            const qrImage = document.getElementById('qrImage');
+            const downloadLink = document.getElementById('downloadLink');
 
-            async function fetchRecentFiles() {
-                try {
-                    const response = await fetch(\`\${baseUrl}/api/files/recent\`, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(\`HTTP error! status: \${response.status}\`);
-                    }
-
-                    const files = await response.json();
-                    recentFilesDiv.innerHTML = '<h2>Recent Files</h2>' + 
-                        files.map(file => \`
-                            <div class="file-item">
-                                <span class="file-name">\${file.originalName}</span>
-                                <a href="\${file.url}" target="_blank">Download</a>
-                            </div>
-                        \`).join('');
-                } catch (error) {
-                    console.error('Error fetching files:', error);
-                    recentFilesDiv.innerHTML = '<p class="error">Error loading recent files</p>';
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    fileNameDisplay.textContent = '📄 ' + e.target.files[0].name;
+                    dropArea.style.borderColor = '#667eea';
+                } else {
+                    fileNameDisplay.textContent = '';
                 }
-            }
+            });
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropArea.classList.add('dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropArea.classList.remove('dragover');
+                });
+            });
+
+            dropArea.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    fileNameDisplay.textContent = '📄 ' + files[0].name;
+                    dropArea.style.borderColor = '#667eea';
+                }
+            });
 
             uploadForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const fileInput = document.getElementById('file');
                 const file = fileInput.files[0];
                 
                 if (!file) {
-                    statusDiv.innerHTML = '<p class="error">Please select a file</p>';
+                    showStatus('Please select a file first', 'error');
                     return;
                 }
 
-                const formData = new FormData();
-                formData.append('file', file);
-
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Uploading...';
                 loadingDiv.classList.add('show');
-                statusDiv.innerHTML = '';
-                qrCodeDiv.innerHTML = '';
+                statusDiv.className = 'status';
                 qrCodeDiv.classList.remove('show');
 
-                try {
-                    const response = await fetch(\`\${baseUrl}/api/files/upload\`, {
-                        method: 'POST',
-                        body: formData
-                    });
+                const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+                const identifier = deviceId + '-' + Date.now();
 
-                    if (!response.ok) {
-                        const error = await response.json();
-                        throw new Error(error.message || 'Upload failed');
+                try {
+                    // 1. Upload Chunks Sequentially
+                    for (let chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
+                        const start = (chunkNumber - 1) * CHUNK_SIZE;
+                        const end = Math.min(file.size, start + CHUNK_SIZE);
+                        const chunk = file.slice(start, end);
+
+                        const formData = new FormData();
+                        formData.append('chunk', chunk, 'blob');
+                        formData.append('filename', file.name);
+                        formData.append('identifier', identifier);
+                        formData.append('chunkNumber', String(chunkNumber));
+                        formData.append('totalChunks', String(totalChunks));
+
+                        const response = await fetch(\`\${baseUrl}/api/files/upload-chunk\`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to upload chunk ' + chunkNumber);
+                        }
+
+                        // Update progress UI (reusing uploadBtn text for simplicity)
+                        const progress = Math.round((chunkNumber / totalChunks) * 100);
+                        uploadBtn.textContent = \`Uploading... \${progress}%\`;
                     }
 
-                    const data = await response.json();
+                    // 2. Complete Upload
+                    uploadBtn.textContent = 'Finalizing...';
+                    const completeResponse = await fetch(\`\${baseUrl}/api/files/upload-complete\`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Device-Id': deviceId
+                        },
+                        body: JSON.stringify({
+                            identifier: identifier,
+                            filename: file.name,
+                            totalChunks: totalChunks,
+                            size: file.size,
+                            mimetype: file.type
+                        })
+                    });
+
+                    if (!completeResponse.ok) {
+                        const error = await completeResponse.json();
+                        throw new Error(error.message || 'Upload completion failed');
+                    }
+
+                    const data = await completeResponse.json();
                     
-                    // Display success message
-                    statusDiv.innerHTML = '<p class="success">File uploaded successfully!</p>';
+                    showStatus('✅ File uploaded successfully! File now appears on main page.', 'success');
                     
-                    // Display QR code
-                    qrCodeDiv.innerHTML = \`<img src="\${data.qrCode}" alt="QR Code">\`;
+                    qrImage.src = data.qrCode;
+                    downloadLink.href = data.file.url;
                     qrCodeDiv.classList.add('show');
                     
-                    // Clear file input
                     fileInput.value = '';
-                    
-                    // Refresh recent files list
-                    fetchRecentFiles();
+                    fileNameDisplay.textContent = '';
                 } catch (error) {
                     console.error('Upload error:', error);
-                    statusDiv.innerHTML = \`<p class="error">\${error.message || 'Error uploading file'}</p>\`;
+                    showStatus('❌ ' + (error.message || 'Error uploading file'), 'error');
                 } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = 'Upload File';
                     loadingDiv.classList.remove('show');
                 }
             };
 
-            // Initial fetch of recent files
-            fetchRecentFiles();
+            function showStatus(message, type) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status show ' + type;
+                setTimeout(() => {
+                    statusDiv.classList.remove('show');
+                }, 5000);
+            }
         </script>
     </body>
     </html>
@@ -383,7 +771,13 @@ router.get('/upload-page', (req, res) => {
 // Download file
 router.get('/download/:filename', async (req, res) => {
     try {
-        const file = await File.findOne({ filename: req.params.filename });
+        const { data: file, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .eq('filename', req.params.filename)
+            .maybeSingle();
+
+        if (error) throw error;
         if (!file) {
             return res.status(404).json({ message: 'File not found' });
         }
@@ -394,20 +788,40 @@ router.get('/download/:filename', async (req, res) => {
         }
 
         // Update download count
-        file.downloadCount = (file.downloadCount || 0) + 1;
-        await file.save();
+        await req.supabase
+            .from('files')
+            .update({ download_count: (file.download_count || 0) + 1 })
+            .eq('id', file.id);
 
         // Set proper content type
         res.setHeader('Content-Type', file.mimetype);
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.originalName)}"`);
-        
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+
         // Stream the file
         const fileStream = fs.createReadStream(filePath);
+
+        // When the download completes, delete the file (Burn after read)
+        res.on('finish', async () => {
+            // Only delete if it finished fully
+            if (res.statusCode === 200) {
+                try {
+                    fs.unlinkSync(filePath);
+                    await req.supabase
+                        .from('files')
+                        .delete()
+                        .eq('id', file.id);
+                    console.log(`Auto-deleted file ${file.filename} after successful download.`);
+                } catch (cleanupError) {
+                    console.error('Error auto-deleting file after download:', cleanupError);
+                }
+            }
+        });
+
         fileStream.pipe(res);
     } catch (error) {
         console.error('Download error:', error);
-        res.status(500).json({ 
-            message: 'Error downloading file', 
+        res.status(500).json({
+            message: 'Error downloading file',
             error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
@@ -416,11 +830,21 @@ router.get('/download/:filename', async (req, res) => {
 // Get file info
 router.get('/info/:filename', async (req, res) => {
     try {
-        const file = await File.findOne({ filename: req.params.filename });
+        const { data: file, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .eq('filename', req.params.filename)
+            .maybeSingle();
+
+        if (error) throw error;
         if (!file) {
             return res.status(404).json({ message: 'File not found' });
         }
-        res.json(file);
+        res.json({
+            ...file,
+            originalName: file.original_name,
+            uploadDate: file.upload_date
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error getting file info', error: error.message });
     }
@@ -428,29 +852,42 @@ router.get('/info/:filename', async (req, res) => {
 
 // Get device-specific files
 router.post('/device-files', async (req, res) => {
-  try {
-    const { fileIds } = req.body;
-    
-    if (!Array.isArray(fileIds)) {
-      return res.status(400).json({ message: 'fileIds must be an array' });
+    try {
+        const { fileIds } = req.body;
+
+        if (!Array.isArray(fileIds)) {
+            return res.status(400).json({ message: 'fileIds must be an array' });
+        }
+
+        const { data: files, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .in('id', fileIds)
+            .order('upload_date', { ascending: false });
+
+        if (error) throw error;
+
+        res.json(files.map(file => ({
+            ...file,
+            originalName: file.original_name,
+            uploadDate: file.upload_date
+        })));
+    } catch (error) {
+        console.error('Error fetching device files:', error);
+        res.status(500).json({ message: 'Error fetching device files' });
     }
-
-    const files = await File.find({
-      '_id': { $in: fileIds }
-    }).sort({ uploadDate: -1 });
-
-    res.json(files);
-  } catch (error) {
-    console.error('Error fetching device files:', error);
-    res.status(500).json({ message: 'Error fetching device files' });
-  }
 });
 
 // Clear recent history for a device
 router.post('/clear-recent-history', async (req, res) => {
     try {
         const { deviceId } = req.body;
-        await RecentHistory.findOneAndDelete({ deviceId });
+        const { error } = await req.supabase
+            .from('device_history')
+            .delete()
+            .eq('device_id', deviceId);
+
+        if (error) throw error;
         res.json({ message: 'Recent history cleared successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error clearing recent history', error: error.message });
@@ -463,29 +900,18 @@ router.post('/add-to-recent/:deviceId', async (req, res) => {
         const { deviceId } = req.params;
         const { fileId } = req.body;
 
-        let history = await RecentHistory.findOne({ deviceId });
-        
-        if (!history) {
-            history = new RecentHistory({
-                deviceId,
-                fileIds: [fileId]
-            });
-        } else {
-            // Keep only the 10 most recent files
-            if (!history.fileIds.includes(fileId)) {
-                history.fileIds.unshift(fileId);
-                if (history.fileIds.length > 10) {
-                    history.fileIds = history.fileIds.slice(0, 10);
-                }
-            }
-        }
+        const { error } = await req.supabase
+            .from('device_history')
+            .upsert([{
+                device_id: deviceId,
+                file_id: fileId
+            }], { onConflict: 'device_id,file_id' });
 
-        await history.save();
+        if (error) throw error;
         res.json({ message: 'File added to recent history' });
     } catch (error) {
         res.status(500).json({ message: 'Error updating recent history', error: error.message });
     }
 });
 
-module.exports = router; 
-module.exports = router; 
+module.exports = router;

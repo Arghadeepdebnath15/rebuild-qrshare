@@ -58,7 +58,7 @@ const FileUpload: React.FC = () => {
     }
 
     const fileType = file.type || '';
-    const isAllowed = CONFIG.ALLOWED_FILE_TYPES.some(type => 
+    const isAllowed = CONFIG.ALLOWED_FILE_TYPES.some(type =>
       type.endsWith('/*') ? fileType.startsWith(type.replace('/*', '/')) : type === fileType
     );
 
@@ -69,13 +69,13 @@ const FileUpload: React.FC = () => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
-    
+
     const validationError = validateFile(droppedFile);
     if (validationError) {
       setError({ show: true, message: validationError, severity: 'error' });
       return;
     }
-    
+
     setFile(droppedFile);
   };
 
@@ -92,13 +92,13 @@ const FileUpload: React.FC = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      
+
       const validationError = validateFile(selectedFile);
       if (validationError) {
         setError({ show: true, message: validationError, severity: 'error' });
         return;
       }
-      
+
       setFile(selectedFile);
     }
   };
@@ -113,34 +113,58 @@ const FileUpload: React.FC = () => {
   };
 
   const uploadFile = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // Add password protection parameters
-    if (isPasswordProtected && password) {
-      formData.append('isPasswordProtected', 'true');
-      formData.append('password', password);
-    }
-    
     const deviceId = getDeviceId();
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const identifier = `${deviceId}-${Date.now()}`;
 
     try {
-      const response = await axios.post(`${API_URL}/api/files/upload`, formData, {
+      // 1. Upload Chunks Sequentially
+      for (let chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
+        const start = (chunkNumber - 1) * CHUNK_SIZE;
+        const end = Math.min(file.size, start + CHUNK_SIZE);
+        const chunk = file.slice(start, end);
+
+        const formData = new FormData();
+        formData.append('chunk', chunk);
+        formData.append('filename', file.name);
+        formData.append('identifier', identifier);
+        formData.append('chunkNumber', String(chunkNumber));
+        formData.append('totalChunks', String(totalChunks));
+
+        if (isPasswordProtected && password && chunkNumber === 1) {
+          formData.append('isPasswordProtected', 'true');
+          formData.append('password', password);
+        }
+
+        await axios.post(`${API_URL}/api/files/upload-chunk`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          withCredentials: true
+        });
+
+        // Update progress simulating that this single file is uploading globally
+        const progress = Math.round((chunkNumber / totalChunks) * 100);
+        setUploadProgress(progress);
+      }
+
+      // 2. Complete Upload
+      const completeResponse = await axios.post(`${API_URL}/api/files/upload-complete`, {
+        identifier,
+        filename: file.name,
+        totalChunks,
+        size: file.size,
+        mimetype: file.type,
+        isPasswordProtected,
+        password: isPasswordProtected ? password : undefined
+      }, {
         headers: {
-          'Content-Type': 'multipart/form-data',
-          'Device-Id': deviceId,
-          'Accept': 'application/json'
+          'Content-Type': 'application/json',
+          'Device-Id': deviceId
         },
-        withCredentials: true,
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = (progressEvent.loaded / progressEvent.total) * 100;
-            setUploadProgress(Math.round(progress));
-          }
-        },
+        withCredentials: true
       });
 
-      return response.data;
+      return completeResponse.data;
     } catch (error) {
       throw error;
     }
@@ -157,14 +181,14 @@ const FileUpload: React.FC = () => {
     try {
       const result = await uploadFile(file);
 
-      // Generate QR code immediately after successful upload
+      // Use the absolute URL directly from the backend response
       const fileData = result.file;
-      const qrCode = result.qrCode;
-      const downloadUrl = `${API_URL}/api/files/download/${fileData.filename}`;
-      
-      setQrCode(qrCode);
-      setDownloadUrl(downloadUrl);
-      
+      const absoluteDownloadUrl = fileData.url;
+      const absoluteQrCode = result.qrCode;
+
+      setQrCode(absoluteQrCode);
+      setDownloadUrl(absoluteDownloadUrl);
+
       // Add file to device's recent history
       const deviceId = localStorage.getItem('deviceId');
       if (deviceId) {
@@ -176,7 +200,7 @@ const FileUpload: React.FC = () => {
           body: JSON.stringify({ fileId: fileData._id })
         });
       }
-      
+
       setShowQR(true);
       setError({ show: true, message: 'File uploaded successfully!', severity: 'success' });
       setFile(null);
@@ -207,7 +231,7 @@ const FileUpload: React.FC = () => {
         await navigator.clipboard.writeText(text);
         return true;
       }
-      
+
       // Fallback: Create a temporary textarea element
       const textArea = document.createElement('textarea');
       textArea.value = text;
@@ -264,9 +288,9 @@ const FileUpload: React.FC = () => {
           p: 2,
           border: '2px dashed',
           borderColor: isDragging ? 'primary.main' : alpha(theme.palette.primary.main, 0.2),
-          backgroundColor: isDragging 
-            ? alpha(theme.palette.primary.main, 0.05) 
-            : theme.palette.mode === 'dark' 
+          backgroundColor: isDragging
+            ? alpha(theme.palette.primary.main, 0.05)
+            : theme.palette.mode === 'dark'
               ? alpha(theme.palette.background.paper, 0.6)
               : theme.palette.background.paper,
           cursor: 'pointer',
@@ -282,8 +306,8 @@ const FileUpload: React.FC = () => {
         onDragLeave={handleDragLeave}
         onClick={() => fileInputRef.current?.click()}
       >
-        <CardContent 
-          sx={{ 
+        <CardContent
+          sx={{
             textAlign: 'center',
             minHeight: '250px',
             display: 'flex',
@@ -298,13 +322,13 @@ const FileUpload: React.FC = () => {
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
-          <CloudUploadIcon 
-            sx={{ 
-              fontSize: 80, 
+          <CloudUploadIcon
+            sx={{
+              fontSize: 80,
               color: isDragging ? 'primary.main' : theme.palette.mode === 'dark' ? 'primary.light' : 'primary.main',
               mb: 3,
               transition: 'all 0.3s ease',
-            }} 
+            }}
           />
           <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
             {isDragging ? 'Drop your file here' : 'Drag and drop your file here'}
@@ -313,11 +337,11 @@ const FileUpload: React.FC = () => {
             or click to select a file
           </Typography>
           {file && (
-            <Box 
-              sx={{ 
+            <Box
+              sx={{
                 mt: 2,
                 p: 2,
-                bgcolor: theme.palette.mode === 'dark' 
+                bgcolor: theme.palette.mode === 'dark'
                   ? alpha(theme.palette.primary.main, 0.1)
                   : alpha(theme.palette.primary.main, 0.05),
                 borderRadius: 2,
@@ -335,13 +359,13 @@ const FileUpload: React.FC = () => {
           )}
           {loading && (
             <Box sx={{ mt: 3, width: '100%', maxWidth: '400px' }}>
-              <LinearProgress 
-                variant="determinate" 
+              <LinearProgress
+                variant="determinate"
                 value={uploadProgress}
                 sx={{
                   height: 8,
                   borderRadius: 4,
-                  backgroundColor: theme.palette.mode === 'dark' 
+                  backgroundColor: theme.palette.mode === 'dark'
                     ? alpha(theme.palette.primary.main, 0.2)
                     : alpha(theme.palette.primary.main, 0.1),
                   '& .MuiLinearProgress-bar': {
@@ -409,10 +433,10 @@ const FileUpload: React.FC = () => {
         </Box>
       )}
 
-      <Dialog 
-        open={showQR} 
-        onClose={() => setShowQR(false)} 
-        maxWidth="sm" 
+      <Dialog
+        open={showQR}
+        onClose={() => setShowQR(false)}
+        maxWidth="sm"
         fullWidth
         TransitionComponent={Zoom}
         PaperProps={{
@@ -440,9 +464,9 @@ const FileUpload: React.FC = () => {
           },
         }}
       >
-        <DialogTitle 
-          sx={{ 
-            textAlign: 'center', 
+        <DialogTitle
+          sx={{
+            textAlign: 'center',
             fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
@@ -452,7 +476,7 @@ const FileUpload: React.FC = () => {
             position: 'relative',
           }}
         >
-          <Typography 
+          <Typography
             variant="h5"
             sx={{
               background: theme.palette.mode === 'dark'
@@ -466,12 +490,12 @@ const FileUpload: React.FC = () => {
           >
             Scan QR Code to Download
           </Typography>
-          <ButtonGroup 
-            variant="outlined" 
+          <ButtonGroup
+            variant="outlined"
             size="small"
             sx={{
               '& .MuiButtonGroup-grouped': {
-                borderColor: theme.palette.mode === 'dark' 
+                borderColor: theme.palette.mode === 'dark'
                   ? alpha(theme.palette.primary.main, 0.3)
                   : alpha(theme.palette.primary.main, 0.2),
                 '&:hover': {
@@ -482,7 +506,7 @@ const FileUpload: React.FC = () => {
             }}
           >
             <Tooltip title="Copy Link" arrow>
-              <IconButton 
+              <IconButton
                 onClick={async () => {
                   const copied = await copyToClipboard(downloadUrl);
                   if (copied) {
@@ -504,7 +528,7 @@ const FileUpload: React.FC = () => {
               </IconButton>
             </Tooltip>
             <Tooltip title="Share" arrow>
-              <IconButton 
+              <IconButton
                 onClick={handleShare}
                 size="small"
                 sx={{
@@ -555,11 +579,11 @@ const FileUpload: React.FC = () => {
                 >
                   <QRCode value={downloadUrl} size={256} />
                 </Paper>
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    mt: 4, 
-                    mb: 2, 
+                <Typography
+                  variant="h6"
+                  sx={{
+                    mt: 4,
+                    mb: 2,
                     fontWeight: 500,
                     color: theme.palette.text.primary,
                     opacity: 0.9,
@@ -569,7 +593,7 @@ const FileUpload: React.FC = () => {
                 </Typography>
                 <Paper
                   elevation={2}
-                  sx={{ 
+                  sx={{
                     mt: 2,
                     p: 2,
                     bgcolor: alpha(theme.palette.primary.main, 0.05),
@@ -587,10 +611,10 @@ const FileUpload: React.FC = () => {
                     },
                   }}
                 >
-                  <Typography 
-                    variant="body2" 
+                  <Typography
+                    variant="body2"
                     color="primary"
-                    sx={{ 
+                    sx={{
                       wordBreak: 'break-all',
                       fontFamily: 'monospace',
                       fontWeight: 500,
@@ -601,10 +625,10 @@ const FileUpload: React.FC = () => {
                 </Paper>
                 {shareError && (
                   <Fade in timeout={200}>
-                    <Typography 
-                      variant="body2" 
-                      color="error" 
-                      sx={{ 
+                    <Typography
+                      variant="body2"
+                      color="error"
+                      sx={{
                         mt: 2,
                         display: 'flex',
                         alignItems: 'center',
@@ -622,13 +646,13 @@ const FileUpload: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <Snackbar 
-        open={error.show} 
-        autoHideDuration={6000} 
+      <Snackbar
+        open={error.show}
+        autoHideDuration={6000}
         onClose={() => setError({ ...error, show: false })}
       >
-        <Alert 
-          onClose={() => setError({ ...error, show: false })} 
+        <Alert
+          onClose={() => setError({ ...error, show: false })}
           severity={error.severity}
           sx={{ width: '100%' }}
         >

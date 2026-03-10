@@ -1,9 +1,9 @@
-// API Configuration
-export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// API Configuration - Use relative path for proxy
+export const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 // Export additional configuration
 export const CONFIG = {
-  POLL_INTERVAL: 30000, // 30 seconds
+  POLL_INTERVAL: 5000, // 30 seconds
   MAX_RETRIES: 3,
   RETRY_DELAY: 2000, // 2 seconds
   MIN_RETRY_DELAY: 1000, // 1 second minimum between retries

@@ -25,7 +25,7 @@ import { useTheme } from '@mui/material/styles';
 import { API_URL, CONFIG } from '../config';
 
 interface FileInfo {
-  _id: string;
+  id: string;
   originalName: string;
   filename: string;
   size: number;
@@ -49,7 +49,7 @@ const ReceivedFiles: React.FC = () => {
   }>({ open: false, fileId: '', filename: '' });
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  
+
   // Use refs for values that shouldn't trigger re-renders
   const retryCountRef = useRef(0);
   const lastFetchTimeRef = useRef(0);
@@ -84,13 +84,13 @@ const ReceivedFiles: React.FC = () => {
 
       setLoading(true);
       setError(null);
-      
+
       const deviceId = localStorage.getItem('deviceId');
       if (!deviceId) {
         throw new Error('Device ID not found');
       }
 
-      const response = await fetch(`${API_URL}/api/files/recent/${deviceId}`, {
+      const response = await fetch(`/api/files/recent/${deviceId}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -110,33 +110,33 @@ const ReceivedFiles: React.FC = () => {
         }
         throw new Error(errorMessage);
       }
-      
+
       const data = await response.json();
-      
+
       if (!Array.isArray(data)) {
         throw new Error('Invalid response format: expected an array');
       }
-      
+
       // Reset retry count on successful fetch
       retryCountRef.current = 0;
       lastFetchTimeRef.current = Date.now();
-      
+
       // Mark files as new if they were uploaded in the last 5 minutes
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       const processedFiles = data.map((file: FileInfo) => ({
         ...file,
         isNew: new Date(file.uploadDate) > fiveMinutesAgo
       }));
-      
+
       if (isMountedRef.current) {
         setFiles(processedFiles);
         setNewFilesCount(processedFiles.filter((f: FileInfo) => f.isNew).length);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error 
+      const errorMessage = err instanceof Error
         ? `Error: ${err.message}`
         : 'An unknown error occurred';
-      
+
       if (isMountedRef.current) {
         setError(errorMessage);
       }
@@ -160,30 +160,23 @@ const ReceivedFiles: React.FC = () => {
 
   // Setup polling with cleanup
   useEffect(() => {
-    const startPolling = async () => {
-      isMountedRef.current = true;
-      await fetchFiles(); // Initial fetch
-      
-      // Set up polling interval
-      const intervalId = setInterval(async () => {
-        if (isMountedRef.current) {
-          await fetchFiles();
-        }
-      }, CONFIG.POLL_INTERVAL);
+    isMountedRef.current = true;
+    fetchFiles(); // Initial fetch
 
-      // Cleanup function
-      return () => {
-        isMountedRef.current = false;
-        clearInterval(intervalId);
-      };
-    };
+    // Set up polling interval
+    const intervalId = setInterval(() => {
+      if (isMountedRef.current) {
+        fetchFiles();
+      }
+    }, CONFIG.POLL_INTERVAL);
 
-    // Start polling and store cleanup function
-    const cleanup = startPolling();
+    // Cleanup function
     return () => {
-      cleanup.then(cleanupFn => cleanupFn());
+      isMountedRef.current = false;
+      clearInterval(intervalId);
     };
-  }, [fetchFiles]); // Include fetchFiles in dependencies
+  }, [fetchFiles]);
+
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -200,7 +193,7 @@ const ReceivedFiles: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await fetch(`${API_URL}/api/files/mark-all-read`, {
+      await fetch(`/api/files/mark-all-read`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -217,12 +210,12 @@ const ReceivedFiles: React.FC = () => {
   };
 
   const handleDownload = async (file: FileInfo) => {
-    if (downloadingFiles.has(file._id)) return;
+    if (downloadingFiles.has(file.id)) return;
 
     try {
       setDownloadingFiles(prev => {
         const next = new Set(prev);
-        next.add(file._id);
+        next.add(file.id);
         return next;
       });
 
@@ -230,7 +223,7 @@ const ReceivedFiles: React.FC = () => {
       if (file.isPasswordProtected) {
         setPasswordDialog({
           open: true,
-          fileId: file._id,
+          fileId: file.id,
           filename: file.filename
         });
         return;
@@ -245,14 +238,14 @@ const ReceivedFiles: React.FC = () => {
     } finally {
       setDownloadingFiles(prev => {
         const next = new Set(prev);
-        next.delete(file._id);
+        next.delete(file.id);
         return next;
       });
     }
   };
 
   const verifyPassword = async (file: FileInfo, password: string): Promise<string> => {
-    const response = await fetch(`${API_URL}/api/files/verify-password/${file.filename}`, {
+    const response = await fetch(`/api/files/verify-password/${file.filename}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -269,14 +262,13 @@ const ReceivedFiles: React.FC = () => {
       throw new Error(data.message || 'Invalid password');
     }
 
-    return file._id;
+    return file.id;
   };
 
   const downloadFile = async (file: FileInfo, verificationToken?: string) => {
-    const downloadUrl = `${API_URL}/api/files/download/${file.filename}${
-      verificationToken ? `?token=${verificationToken}` : ''
-    }`;
-    
+    const downloadUrl = `/api/files/download/${file.filename}${verificationToken ? `?token=${verificationToken}` : ''
+      }`;
+
     const response = await fetch(downloadUrl, {
       method: 'GET',
       credentials: 'include',
@@ -288,7 +280,7 @@ const ReceivedFiles: React.FC = () => {
         if (data.requiresPassword) {
           setPasswordDialog({
             open: true,
-            fileId: file._id,
+            fileId: file.id,
             filename: file.filename
           });
           return;
@@ -304,7 +296,7 @@ const ReceivedFiles: React.FC = () => {
       if (data.requiresPassword) {
         setPasswordDialog({
           open: true,
-          fileId: file._id,
+          fileId: file.id,
           filename: file.filename
         });
         return;
@@ -329,16 +321,16 @@ const ReceivedFiles: React.FC = () => {
   };
 
   const handlePasswordSubmit = async () => {
-    const file = files.find(f => f._id === passwordDialog.fileId);
+    const file = files.find(f => f.id === passwordDialog.fileId);
     if (!file) return;
 
     try {
       // First verify the password
       const verificationToken = await verifyPassword(file, password);
-      
+
       // If password is valid, proceed with download
       await downloadFile(file, verificationToken);
-      
+
       // Clear password dialog
       setPasswordDialog({ open: false, fileId: '', filename: '' });
       setPassword('');
@@ -368,8 +360,8 @@ const ReceivedFiles: React.FC = () => {
 
     if (files.length === 0) {
       return (
-        <Box sx={{ 
-          textAlign: 'center', 
+        <Box sx={{
+          textAlign: 'center',
           py: 3,
           display: 'flex',
           flexDirection: 'column',
@@ -385,7 +377,7 @@ const ReceivedFiles: React.FC = () => {
     return (
       <List>
         {files.map((file, index) => (
-          <React.Fragment key={file._id}>
+          <React.Fragment key={file.id}>
             <ListItem
               sx={{
                 bgcolor: file.isNew ? alpha(theme.palette.info.main, 0.1) : 'transparent',
@@ -397,8 +389,8 @@ const ReceivedFiles: React.FC = () => {
                 py: 2,
               }}
             >
-              <Box sx={{ 
-                display: 'flex', 
+              <Box sx={{
+                display: 'flex',
                 alignItems: 'center',
                 flex: 1,
                 minWidth: 0, // This ensures text truncation works
@@ -420,8 +412,8 @@ const ReceivedFiles: React.FC = () => {
                   }
                   secondary={
                     <Typography component="div" variant="body2" color="text.secondary">
-                      <Box sx={{ 
-                        display: 'flex', 
+                      <Box sx={{
+                        display: 'flex',
                         flexDirection: { xs: 'column', sm: 'row' },
                         gap: { xs: 0.5, sm: 2 },
                         '& > span': {
@@ -440,13 +432,13 @@ const ReceivedFiles: React.FC = () => {
                 color="primary"
                 startIcon={<DownloadIcon />}
                 onClick={() => handleDownload(file)}
-                disabled={downloadingFiles.has(file._id)}
+                disabled={downloadingFiles.has(file.id)}
                 sx={{
                   minWidth: 120,
                   alignSelf: { xs: 'stretch', sm: 'center' }
                 }}
               >
-                {downloadingFiles.has(file._id) ? 'Downloading...' : 'Download'}
+                {downloadingFiles.has(file.id) ? 'Downloading...' : 'Download'}
               </Button>
             </ListItem>
             {index < files.length - 1 && <Divider />}
@@ -458,14 +450,14 @@ const ReceivedFiles: React.FC = () => {
 
   return (
     <>
-      <Card sx={{ 
+      <Card sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column'
       }}>
-        <Box sx={{ 
-          p: 2, 
-          display: 'flex', 
+        <Box sx={{
+          p: 2,
+          display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: 1,
@@ -482,7 +474,7 @@ const ReceivedFiles: React.FC = () => {
             </IconButton>
           )}
         </Box>
-        <Box sx={{ 
+        <Box sx={{
           flex: 1,
           overflow: 'auto',
           p: 2
@@ -490,9 +482,9 @@ const ReceivedFiles: React.FC = () => {
           {renderContent()}
         </Box>
       </Card>
-      
-      <Dialog 
-        open={passwordDialog.open} 
+
+      <Dialog
+        open={passwordDialog.open}
         onClose={() => {
           setPasswordDialog({ open: false, fileId: '', filename: '' });
           setPassword('');
@@ -516,7 +508,7 @@ const ReceivedFiles: React.FC = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setPasswordDialog({ open: false, fileId: '', filename: '' });
               setPassword('');
@@ -525,9 +517,9 @@ const ReceivedFiles: React.FC = () => {
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handlePasswordSubmit}
-            variant="contained" 
+            variant="contained"
             disabled={!password}
           >
             Download

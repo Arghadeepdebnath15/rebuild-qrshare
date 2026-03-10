@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Box, 
-  Card, 
-  CardContent, 
-  Typography, 
-  alpha, 
-  Paper, 
-  Zoom, 
-  IconButton, 
-  Tooltip, 
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  alpha,
+  Paper,
+  Zoom,
+  IconButton,
+  Tooltip,
   ButtonGroup,
   Fade,
 } from '@mui/material';
@@ -25,19 +25,28 @@ const UploadQRCode: React.FC = () => {
   const theme = useTheme();
   const [shareError, setShareError] = useState<string>('');
   const [isHovered, setIsHovered] = useState(false);
-  
-  // Get the base URL for the upload page
-  const uploadUrl = `${API_URL}/api/files/upload-page`;
+  const [uploadUrl, setUploadUrl] = useState<string>(`${API_URL}/files/upload-page`);
+
+  // Fetch the absolute reachable base URL from backend on mount
+  React.useEffect(() => {
+    fetch('/api/config/base-url')
+      .then(res => res.json())
+      .then(data => {
+        if (data.baseUrl) {
+          // If we got an absolute URL, use it
+          const deviceId = localStorage.getItem('deviceId') || '';
+          setUploadUrl(`${data.baseUrl}/api/files/upload-page?deviceId=${deviceId}`);
+        }
+      })
+      .catch(err => console.error('Error fetching base URL:', err));
+  }, []);
 
   const copyToClipboard = async (text: string) => {
     try {
-      // Try using the Clipboard API
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
         return true;
       }
-      
-      // Fallback: Create a temporary textarea element
       const textArea = document.createElement('textarea');
       textArea.value = text;
       textArea.style.position = 'fixed';
@@ -46,7 +55,6 @@ const UploadQRCode: React.FC = () => {
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
-
       try {
         document.execCommand('copy');
         textArea.remove();
@@ -86,11 +94,11 @@ const UploadQRCode: React.FC = () => {
 
   return (
     <Zoom in={true}>
-      <Card 
+      <Card
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        sx={{ 
-          mt: 4, 
+        sx={{
+          mt: 4,
           mb: 4,
           background: theme.palette.mode === 'dark'
             ? `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.9)} 0%, ${alpha(theme.palette.background.paper, 0.7)} 100%)`
@@ -125,28 +133,28 @@ const UploadQRCode: React.FC = () => {
             opacity: isHovered ? 0.2 : 0,
             transition: 'opacity 0.4s ease',
           },
-          boxShadow: isHovered 
+          boxShadow: isHovered
             ? `0 16px 40px ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.3 : 0.2)}`
             : `0 8px 20px ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.2 : 0.1)}`,
         }}
       >
-        <CardContent sx={{ 
-          textAlign: 'center', 
-          pt: 5, 
-          position: 'relative', 
+        <CardContent sx={{
+          textAlign: 'center',
+          pt: 5,
+          position: 'relative',
           zIndex: 1,
           '&:last-child': { pb: 4 },
         }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             mb: 4,
             px: 2,
           }}>
-            <Typography 
-              variant="h5" 
-              sx={{ 
+            <Typography
+              variant="h5"
+              sx={{
                 fontWeight: 600,
                 flex: 1,
                 background: theme.palette.mode === 'dark'
@@ -161,12 +169,12 @@ const UploadQRCode: React.FC = () => {
             >
               Quick Upload QR Code
             </Typography>
-            <ButtonGroup 
-              variant="outlined" 
+            <ButtonGroup
+              variant="outlined"
               size="small"
               sx={{
                 '& .MuiButtonGroup-grouped': {
-                  borderColor: theme.palette.mode === 'dark' 
+                  borderColor: theme.palette.mode === 'dark'
                     ? alpha(theme.palette.primary.main, 0.3)
                     : alpha(theme.palette.primary.main, 0.2),
                   '&:hover': {
@@ -177,7 +185,7 @@ const UploadQRCode: React.FC = () => {
               }}
             >
               <Tooltip title="Copy Link" arrow>
-                <IconButton 
+                <IconButton
                   onClick={async () => {
                     const copied = await copyToClipboard(uploadUrl);
                     if (copied) {
@@ -200,7 +208,7 @@ const UploadQRCode: React.FC = () => {
                 </IconButton>
               </Tooltip>
               <Tooltip title="Share" arrow>
-                <IconButton 
+                <IconButton
                   onClick={handleShare}
                   size="small"
                   sx={{
@@ -216,11 +224,11 @@ const UploadQRCode: React.FC = () => {
             </ButtonGroup>
           </Box>
 
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               mb: 4,
               gap: 1,
               px: 2,
@@ -233,14 +241,14 @@ const UploadQRCode: React.FC = () => {
             ].map((step, index) => (
               <React.Fragment key={step.label}>
                 {index > 0 && (
-                  <Box 
-                    sx={{ 
-                      height: 2, 
-                      width: { xs: 20, sm: 40 }, 
+                  <Box
+                    sx={{
+                      height: 2,
+                      width: { xs: 20, sm: 40 },
                       background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.3)} 0%, ${alpha(theme.palette.primary.main, 0.1)} 100%)`,
                       transform: isHovered ? 'scaleX(1.1)' : 'none',
                       transition: 'transform 0.3s ease',
-                    }} 
+                    }}
                   />
                 )}
                 <Paper
@@ -263,8 +271,8 @@ const UploadQRCode: React.FC = () => {
                     zIndex: 1,
                   }}
                 >
-                  <Box 
-                    sx={{ 
+                  <Box
+                    sx={{
                       color: theme.palette.mode === 'dark' ? 'primary.light' : 'primary.main',
                       mb: 0.5,
                       display: 'flex',
@@ -276,10 +284,10 @@ const UploadQRCode: React.FC = () => {
                   >
                     {step.icon}
                   </Box>
-                  <Typography 
-                    variant="body2" 
+                  <Typography
+                    variant="body2"
                     sx={{
-                      color: theme.palette.mode === 'dark' 
+                      color: theme.palette.mode === 'dark'
                         ? alpha(theme.palette.text.primary, 0.8)
                         : theme.palette.text.secondary,
                       fontWeight: 500,
@@ -292,8 +300,8 @@ const UploadQRCode: React.FC = () => {
             ))}
           </Box>
 
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               mb: 4,
               position: 'relative',
               '&::before': {
@@ -325,16 +333,16 @@ const UploadQRCode: React.FC = () => {
               <QRCode
                 value={uploadUrl}
                 size={200}
-                style={{ 
+                style={{
                   display: 'block',
                 }}
               />
             </Paper>
           </Box>
 
-          <Typography 
-            variant="body1" 
-            sx={{ 
+          <Typography
+            variant="body1"
+            sx={{
               color: theme.palette.text.secondary,
               fontWeight: 500,
               opacity: 0.9,
@@ -346,10 +354,10 @@ const UploadQRCode: React.FC = () => {
           </Typography>
 
           <Fade in={!!shareError}>
-            <Typography 
-              variant="body2" 
+            <Typography
+              variant="body2"
               color={shareError.includes('copied') ? 'success.main' : 'error.main'}
-              sx={{ 
+              sx={{
                 mt: 2,
                 fontWeight: 500,
                 display: 'flex',
@@ -367,4 +375,4 @@ const UploadQRCode: React.FC = () => {
   );
 };
 
-export default UploadQRCode; 
+export default UploadQRCode;
