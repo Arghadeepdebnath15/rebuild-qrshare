@@ -47,7 +47,11 @@ app.use((req, res, next) => {
 // API Routes
 app.use('/api/files', fileRoutes);
 
-// API health check endpoints
+// Root route for simple keep-alive
+app.get('/', (req, res) => res.send('Backend is alive!'));
+
+// Lightweight ping for cron jobs
+app.get('/ping', (req, res) => res.status(200).send('pong'));
 app.get(['/api/health', '/health'], async (req, res) => {
     try {
         const { data, error } = await req.supabase.from('files').select('count', { count: 'exact', head: true });
