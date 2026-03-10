@@ -94,7 +94,9 @@ const ReceivedFiles: React.FC = () => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Origin': window.location.origin,
+          'X-Requested-With': 'XMLHttpRequest'
         },
         credentials: 'include',
         mode: 'cors'

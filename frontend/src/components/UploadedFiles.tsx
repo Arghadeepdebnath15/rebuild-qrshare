@@ -45,7 +45,10 @@ const UploadedFiles: React.FC = () => {
       }
       const deviceId = localStorage.getItem('deviceId') || '';
       console.log('Fetching files from /api/files/recent for device:', deviceId);
-      const response = await fetch(`${API_URL}/api/files/recent?deviceId=${deviceId}`);
+      const response = await fetch(`${API_URL}/api/files/recent?deviceId=${deviceId}`, {
+        credentials: 'include',
+        mode: 'cors'
+      });
       console.log('Response status:', response.status);
       if (!response.ok) {
         const errorText = await response.text();
