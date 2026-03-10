@@ -155,7 +155,8 @@ const FileUpload: React.FC = () => {
         size: file.size,
         mimetype: file.type,
         isPasswordProtected,
-        password: isPasswordProtected ? password : undefined
+        password: isPasswordProtected ? password : undefined,
+        isExternal: false
       }, {
         headers: {
           'Content-Type': 'application/json',

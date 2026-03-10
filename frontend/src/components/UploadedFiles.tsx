@@ -43,8 +43,9 @@ const UploadedFiles: React.FC = () => {
         setLoading(true);
         setError(null);
       }
-      console.log('Fetching files from /api/files/recent...');
-      const response = await fetch(`${API_URL}/api/files/recent`);
+      const deviceId = localStorage.getItem('deviceId') || '';
+      console.log('Fetching files from /api/files/recent for device:', deviceId);
+      const response = await fetch(`${API_URL}/api/files/recent?deviceId=${deviceId}`);
       console.log('Response status:', response.status);
       if (!response.ok) {
         const errorText = await response.text();

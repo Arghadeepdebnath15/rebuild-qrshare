@@ -73,9 +73,29 @@ const getBaseUrl = (req) => {
 // Get recent files
 router.get('/recent', async (req, res) => {
     try {
-        const { data: files, error } = await req.supabase
+        const { deviceId } = req.query;
+        let query = req.supabase
             .from('files')
-            .select('*')
+            .select('*');
+
+        if (deviceId) {
+            // Join with device_history to get specific device's internal uploads
+            const { data: history, error: historyError } = await req.supabase
+                .from('device_history')
+                .select('file_id')
+                .eq('device_id', deviceId)
+                .eq('is_external', false);
+
+            if (historyError) throw historyError;
+
+            const fileIds = history.map(h => h.file_id);
+            if (fileIds.length === 0) {
+                return res.json([]);
+            }
+            query = query.in('id', fileIds);
+        }
+
+        const { data: files, error } = await query
             .order('upload_date', { ascending: false })
             .limit(10);
 
@@ -84,7 +104,7 @@ router.get('/recent', async (req, res) => {
         const baseUrl = getBaseUrl(req);
         const filesWithUrls = files.map(file => ({
             ...file,
-            originalName: file.original_name, // Map back for frontend compatibility
+            originalName: file.original_name,
             uploadDate: file.upload_date,
             url: `${baseUrl}/api/files/download/${file.filename}`
         }));
@@ -92,10 +112,7 @@ router.get('/recent', async (req, res) => {
         res.json(filesWithUrls);
     } catch (error) {
         console.error('Error fetching recent files:', error);
-        res.status(500).json({
-            message: 'Error fetching recent files',
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-        });
+        res.status(500).json({ message: 'Error fetching recent files', error: error.message });
     }
 });
 
@@ -234,7 +251,7 @@ router.post('/upload-chunk', upload.single('chunk'), async (req, res) => {
 // Complete Chunked Upload Endpoint
 router.post('/upload-complete', async (req, res) => {
     try {
-        const { identifier, filename, totalChunks, size, mimetype } = req.body;
+        const { identifier, filename, totalChunks, size, mimetype, isExternal } = req.body;
 
         if (!identifier || !filename || !totalChunks) {
             return res.status(400).json({ message: 'Missing upload completion data' });
@@ -313,7 +330,7 @@ router.post('/upload-complete', async (req, res) => {
                 .upsert([{
                     device_id: deviceId,
                     file_id: file.id,
-                    is_external: true
+                    is_external: isExternal === true
                 }], { onConflict: 'device_id,file_id' });
         }
 

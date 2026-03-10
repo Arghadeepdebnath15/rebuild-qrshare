@@ -70,6 +70,7 @@ const MobileUpload: React.FC = () => {
                 totalChunks,
                 size: file.size,
                 mimetype: file.type,
+                isExternal: true,
             }, {
                 headers: {
                     'Content-Type': 'application/json',
