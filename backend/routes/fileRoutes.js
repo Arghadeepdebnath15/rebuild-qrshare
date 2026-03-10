@@ -78,7 +78,7 @@ router.get('/recent', async (req, res) => {
             .from('files')
             .select('*');
 
-        if (deviceId) {
+        if (deviceId && deviceId !== 'null' && deviceId !== 'undefined') {
             // Join with device_history to get specific device's internal uploads
             const { data: history, error: historyError } = await req.supabase
                 .from('device_history')
@@ -88,7 +88,11 @@ router.get('/recent', async (req, res) => {
 
             if (historyError) throw historyError;
 
-            const fileIds = history.map(h => h.file_id);
+            // Filter out any nullish file_ids to prevent UUID syntax errors
+            const fileIds = (history || [])
+                .map(h => h.file_id)
+                .filter(id => id && id !== 'null' && id !== 'undefined');
+
             if (fileIds.length === 0) {
                 return res.json([]);
             }
@@ -120,6 +124,11 @@ router.get('/recent', async (req, res) => {
 router.get('/recent/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
+
+        if (!deviceId || deviceId === 'null' || deviceId === 'undefined') {
+            return res.json([]);
+        }
+
         const { data: history, error } = await req.supabase
             .from('device_history')
             .select('files(*)')
