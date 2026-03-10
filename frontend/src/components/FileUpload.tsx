@@ -190,6 +190,18 @@ const FileUpload: React.FC = () => {
       setQrCode(absoluteQrCode);
       setDownloadUrl(absoluteDownloadUrl);
 
+      // Add file to device's recent history
+      const deviceId = localStorage.getItem('deviceId');
+      if (deviceId) {
+        await fetch(`${API_URL}/api/files/add-to-recent/${deviceId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fileId: fileData._id })
+        });
+      }
+
       setShowQR(true);
       setError({ show: true, message: 'File uploaded successfully!', severity: 'success' });
       setFile(null);

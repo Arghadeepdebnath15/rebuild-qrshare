@@ -70,36 +70,32 @@ const getBaseUrl = (req) => {
     return `${protocol}://${host}`;
 };
 
-// Get recent files (Uploaded Files section - always device specific)
+// Get recent files
 router.get('/recent', async (req, res) => {
     try {
         const { deviceId } = req.query;
-        if (!deviceId || deviceId === 'null' || deviceId === 'undefined') {
-            return res.json([]);
-        }
-
-        // Get this device's internal (is_external: false) uploads
-        const { data: history, error: historyError } = await req.supabase
-            .from('device_history')
-            .select('file_id')
-            .eq('device_id', deviceId)
-            .eq('is_external', false);
-
-        if (historyError) throw historyError;
-
-        // Filter out null or invalid file_ids to prevent UUID syntax errors
-        const fileIds = history
-            .map(h => h.file_id)
-            .filter(id => id && id !== 'null' && id !== 'undefined');
-
-        if (fileIds.length === 0) {
-            return res.json([]);
-        }
-
-        const { data: files, error } = await req.supabase
+        let query = req.supabase
             .from('files')
-            .select('*')
-            .in('id', fileIds)
+            .select('*');
+
+        if (deviceId) {
+            // Join with device_history to get specific device's internal uploads
+            const { data: history, error: historyError } = await req.supabase
+                .from('device_history')
+                .select('file_id')
+                .eq('device_id', deviceId)
+                .eq('is_external', false);
+
+            if (historyError) throw historyError;
+
+            const fileIds = history.map(h => h.file_id);
+            if (fileIds.length === 0) {
+                return res.json([]);
+            }
+            query = query.in('id', fileIds);
+        }
+
+        const { data: files, error } = await query
             .order('upload_date', { ascending: false })
             .limit(10);
 
@@ -124,10 +120,6 @@ router.get('/recent', async (req, res) => {
 router.get('/recent/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
-        if (!deviceId || deviceId === 'null' || deviceId === 'undefined') {
-            return res.json([]);
-        }
-
         const { data: history, error } = await req.supabase
             .from('device_history')
             .select('files(*)')
@@ -925,16 +917,11 @@ router.post('/add-to-recent/:deviceId', async (req, res) => {
         const { deviceId } = req.params;
         const { fileId } = req.body;
 
-        if (!deviceId || deviceId === 'null' || !fileId || fileId === 'null') {
-            return res.status(400).json({ message: 'Invalid device or file ID' });
-        }
-
         const { error } = await req.supabase
             .from('device_history')
             .upsert([{
                 device_id: deviceId,
-                file_id: fileId,
-                is_external: false // Manually added files are always internal uploads
+                file_id: fileId
             }], { onConflict: 'device_id,file_id' });
 
         if (error) throw error;
