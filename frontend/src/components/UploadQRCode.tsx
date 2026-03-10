@@ -29,16 +29,10 @@ const UploadQRCode: React.FC = () => {
 
   // Fetch the absolute reachable base URL from backend on mount
   React.useEffect(() => {
-    fetch('/api/config/base-url')
-      .then(res => res.json())
-      .then(data => {
-        if (data.baseUrl) {
-          // If we got an absolute URL, use it
-          const deviceId = localStorage.getItem('deviceId') || '';
-          setUploadUrl(`${data.baseUrl}/api/files/upload-page?deviceId=${deviceId}`);
-        }
-      })
-      .catch(err => console.error('Error fetching base URL:', err));
+    // Instead of pointing to the backend /upload-page, we point to the frontend /upload
+    const frontendUrl = window.location.origin;
+    const deviceId = localStorage.getItem('deviceId') || '';
+    setUploadUrl(`${frontendUrl}/upload?deviceId=${deviceId}`);
   }, []);
 
   const copyToClipboard = async (text: string) => {

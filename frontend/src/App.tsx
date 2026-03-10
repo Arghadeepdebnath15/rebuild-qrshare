@@ -20,6 +20,7 @@ import UploadQRCode from './components/UploadQRCode';
 import UploadedFiles from './components/UploadedFiles';
 import ReceivedFiles from './components/ReceivedFiles';
 import Blog from './components/Blog';
+import MobileUpload from './components/MobileUpload';
 
 // Add Poppins font
 const poppinsFont = document.createElement('link');
@@ -256,6 +257,17 @@ function App() {
       </Box>
     );
   }, [mode, tabValue, theme, toggleColorMode]);
+
+  if (window.location.pathname === '/upload') {
+    return (
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <MobileUpload />
+        </ThemeProvider>
+      </StyledEngineProvider>
+    );
+  }
 
   return (
     <StyledEngineProvider injectFirst>
