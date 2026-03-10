@@ -22,7 +22,26 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Middleware
-app.use(cors());
+const allowedOrigins = [
+    'https://qrfileshare.web.app',
+    'https://qrfileshare.firebaseapp.com',
+    'http://localhost:3000'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Device-Id', 'device-id']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -41,7 +60,6 @@ app.use((req, res, next) => {
 
 // API Routes
 app.use('/api/files', fileRoutes);
-app.use('/files', fileRoutes); // Handle cases where proxy strips /api
 
 // API health check endpoints
 app.get(['/api/health', '/health'], async (req, res) => {
