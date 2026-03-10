@@ -23,6 +23,7 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
+import { API_URL } from '../config';
 
 interface Folder {
   id: string;
@@ -44,7 +45,7 @@ const FolderStructure: React.FC<FolderStructureProps> = ({ onFolderSelect }: Fol
 
   const fetchFolders = useCallback(async () => {
     try {
-      const response = await fetch('/api/folders');
+      const response = await fetch(`${API_URL}/api/folders`);
       if (response.ok) {
         const data = await response.json();
         setFolders(data);

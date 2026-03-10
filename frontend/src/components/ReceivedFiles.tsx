@@ -22,7 +22,7 @@ import NoFilesIcon from '@mui/icons-material/FileCopy';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import DownloadIcon from '@mui/icons-material/Download';
 import { useTheme } from '@mui/material/styles';
-import { CONFIG } from '../config';
+import { API_URL, CONFIG } from '../config';
 
 interface FileInfo {
   id: string;
@@ -90,7 +90,7 @@ const ReceivedFiles: React.FC = () => {
         throw new Error('Device ID not found');
       }
 
-      const response = await fetch(`/api/files/recent/${deviceId}`, {
+      const response = await fetch(`${API_URL}/api/files/recent/${deviceId}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -193,7 +193,7 @@ const ReceivedFiles: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await fetch(`/api/files/mark-all-read`, {
+      await fetch(`${API_URL}/api/files/mark-all-read`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -245,7 +245,7 @@ const ReceivedFiles: React.FC = () => {
   };
 
   const verifyPassword = async (file: FileInfo, password: string): Promise<string> => {
-    const response = await fetch(`/api/files/verify-password/${file.filename}`, {
+    const response = await fetch(`${API_URL}/api/files/verify-password/${file.filename}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -266,7 +266,7 @@ const ReceivedFiles: React.FC = () => {
   };
 
   const downloadFile = async (file: FileInfo, verificationToken?: string) => {
-    const downloadUrl = `/api/files/download/${file.filename}${verificationToken ? `?token=${verificationToken}` : ''
+    const downloadUrl = `${API_URL}/api/files/download/${file.filename}${verificationToken ? `?token=${verificationToken}` : ''
       }`;
 
     const response = await fetch(downloadUrl, {

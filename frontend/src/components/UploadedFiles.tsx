@@ -18,6 +18,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
 import NoFilesIcon from '@mui/icons-material/FileCopy';
+import { API_URL } from '../config';
 
 interface FileInfo {
   id: string;
@@ -43,7 +44,7 @@ const UploadedFiles: React.FC = () => {
         setError(null);
       }
       console.log('Fetching files from /api/files/recent...');
-      const response = await fetch('/api/files/recent');
+      const response = await fetch(`${API_URL}/api/files/recent`);
       console.log('Response status:', response.status);
       if (!response.ok) {
         const errorText = await response.text();
