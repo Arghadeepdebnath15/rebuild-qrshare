@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     Box,
     Typography,
     Button,
     LinearProgress,
     Paper,
-    IconButton,
     Alert,
     Fade,
     useTheme,
@@ -13,7 +12,6 @@ import {
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
 import axios from 'axios';
 import { API_URL } from '../config';
