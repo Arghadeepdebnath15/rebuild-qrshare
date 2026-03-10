@@ -22,7 +22,7 @@ import NoFilesIcon from '@mui/icons-material/FileCopy';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import DownloadIcon from '@mui/icons-material/Download';
 import { useTheme } from '@mui/material/styles';
-import { API_URL, CONFIG } from '../config';
+import { CONFIG } from '../config';
 
 interface FileInfo {
   id: string;
