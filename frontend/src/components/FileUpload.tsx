@@ -30,6 +30,7 @@ import QRCode from 'react-qr-code';
 import axios from 'axios';
 import { API_URL, CONFIG } from '../config';
 import { Zoom } from '@mui/material';
+import Peer from 'peerjs';
 
 interface ErrorState {
   show: boolean;
@@ -49,7 +50,9 @@ const FileUpload: React.FC = () => {
   const [shareError, setShareError] = useState<string>('');
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [password, setPassword] = useState('');
+  const [isP2P, setIsP2P] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const peerRef = useRef<Peer | null>(null);
   const theme = useTheme();
 
   const validateFile = useCallback((file: File): string | null => {
@@ -180,8 +183,94 @@ const FileUpload: React.FC = () => {
     }
   }, [isPasswordProtected, password]);
 
+  const startP2PTransfer = useCallback((file: File) => {
+    setLoading(true);
+    setUploadProgress(0);
+    setError({ show: false, message: '', severity: 'error' });
+
+    const peer = new Peer({
+      host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com',
+      port: window.location.hostname === 'localhost' ? 9000 : 443,
+      path: '/peerjs',
+      secure: window.location.hostname !== 'localhost'
+    });
+
+    peerRef.current = peer;
+
+    peer.on('open', (id) => {
+      const p2pLink = `${window.location.origin}/p2p/${id}`;
+      setDownloadUrl(p2pLink);
+      setQrCode(''); // react-qr-code will use downloadUrl
+      setShowQR(true);
+      setLoading(false);
+      setError({ show: true, message: 'Ready for Instant Transfer!', severity: 'success' });
+    });
+
+    peer.on('connection', (conn) => {
+      conn.on('data', (data: any) => {
+        if (data.type === 'READY') {
+          // Send file metadata
+          conn.send({
+            type: 'START',
+            file: {
+              name: file.name,
+              size: file.size,
+              type: file.type
+            }
+          });
+
+          // Stream file
+          const CHUNK_SIZE = 16384; // 16KB chunks
+          const reader = new FileReader();
+          let offset = 0;
+
+          reader.onload = (e: any) => {
+            conn.send({
+              type: 'CHUNK',
+              chunk: e.target.result,
+              totalChunks: Math.ceil(file.size / CHUNK_SIZE)
+            });
+            offset += e.target.result.byteLength;
+            
+            const progress = Math.round((offset / file.size) * 100);
+            setUploadProgress(progress);
+
+            if (offset < file.size) {
+              readNext();
+            } else {
+              conn.send({ type: 'END' });
+              // Small delay before marking success
+              setTimeout(() => {
+                setError({ show: true, message: 'Transfer completed successfully!', severity: 'success' });
+              }, 1000);
+            }
+          };
+
+          const readNext = () => {
+             const slice = file.slice(offset, offset + CHUNK_SIZE);
+             reader.readAsArrayBuffer(slice);
+          };
+
+          readNext();
+        }
+      });
+    });
+
+    peer.on('error', (err) => {
+      console.error('P2P Error:', err);
+      setError({ show: true, message: 'Peer connection failed', severity: 'error' });
+      setLoading(false);
+    });
+
+  }, []);
+
   const handleUpload = useCallback(async () => {
     if (!file) return;
+
+    if (isP2P) {
+      startP2PTransfer(file);
+      return;
+    }
 
     setLoading(true);
     setUploadProgress(0);
@@ -420,6 +509,25 @@ const FileUpload: React.FC = () => {
               </Box>
             )}
           </Card>
+          
+          <Card sx={{ p: 2, mb: 2, background: isP2P ? alpha(theme.palette.primary.main, 0.05) : 'inherit', border: isP2P ? `1px solid ${theme.palette.primary.main}` : 'none' }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isP2P}
+                  onChange={(e) => setIsP2P(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>Instant Transfer (P2P)</Typography>
+                  <Typography variant="caption" color="text.secondary">No server storage. Sender must stay online.</Typography>
+                </Box>
+              }
+            />
+          </Card>
+
           <Box sx={{ textAlign: 'center' }}>
             <Button
               variant="contained"

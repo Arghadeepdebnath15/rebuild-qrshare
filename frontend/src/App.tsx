@@ -22,6 +22,7 @@ import ReceivedFiles from './components/ReceivedFiles';
 import Blog from './components/Blog';
 import MobileUpload from './components/MobileUpload';
 import FileShare from './pages/FileShare';
+import P2PShare from './pages/P2PShare';
 
 // Add Poppins font
 const poppinsFont = document.createElement('link');
@@ -270,12 +271,15 @@ function App() {
     );
   }
 
-  if (window.location.pathname.startsWith('/share/')) {
+    );
+  }
+
+  if (window.location.pathname.startsWith('/p2p/')) {
     return (
       <StyledEngineProvider injectFirst>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <FileShare />
+          <P2PShare />
         </ThemeProvider>
       </StyledEngineProvider>
     );
