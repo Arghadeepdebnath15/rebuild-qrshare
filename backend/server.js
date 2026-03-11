@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -10,6 +11,7 @@ const { ExpressPeerServer } = require('peer');
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5055;
 
 // Initialize Supabase client
@@ -107,6 +109,14 @@ app.use('/api', (err, req, res, next) => {
     });
 });
 
+// PeerJS Signaling Server (Mounted before catch-all)
+const peerServer = ExpressPeerServer(server, {
+    debug: true,
+    path: '/'
+});
+app.use('/peerjs', peerServer);
+console.log('PeerJS signaling registered on /peerjs');
+
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
     // Look for build files in the public directory first
@@ -182,20 +192,13 @@ const getLocalIp = () => {
 
 const localIp = getLocalIp();
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Local access: http://localhost:${PORT}`);
     console.log(`WiFi access: http://${localIp}:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-    // --- PEERJS SIGNALING SERVER ---
-    const peerServer = ExpressPeerServer(server, {
-        debug: true,
-        path: '/'
-    });
-    
-    app.use('/peerjs', peerServer);
-    console.log('PeerJS signaling active on /peerjs');
+    // --- PEERJS SIGNALING SERVER MOVED ABOVE ---
     
     console.log('\nAvailable endpoints:');
     console.log(`- GET http://localhost:${PORT}/api/health`);
