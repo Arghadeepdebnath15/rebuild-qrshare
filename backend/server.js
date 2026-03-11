@@ -133,11 +133,6 @@ if (process.env.NODE_ENV === 'production') {
         if (req.url.startsWith('/api/') || req.url.startsWith('/peerjs/')) {
             return next();
         }
-            return res.status(404).json({
-                status: 'error',
-                message: 'API endpoint not found'
-            });
-        }
 
         // Try to serve index.html from public directory first
         const publicIndexPath = path.join(publicPath, 'index.html');
