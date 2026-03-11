@@ -112,10 +112,9 @@ app.use('/api', (err, req, res, next) => {
 // PeerJS Signaling Server
 const peerServer = ExpressPeerServer(server, {
     debug: true,
-    proxied: true,
-    path: '/peerjs'
+    proxied: true
 });
-app.use(peerServer); // Use at root level; PeerServer will handle anything starting with /peerjs
+app.use('/peerjs', peerServer);
 console.log('PeerJS signaling registered on path /peerjs');
 
 // Serve static assets in production
@@ -130,8 +129,10 @@ if (process.env.NODE_ENV === 'production') {
 
     // Catch-all route for frontend - MUST come after API and PeerJS routes
     app.get('*', (req, res, next) => {
-        // If this is an API or PeerJS request, let it fall through skip catch-all
-        if (req.path.startsWith('/api/') || req.path.startsWith('/peerjs')) {
+        const url = req.originalUrl || req.url;
+        
+        // If this is an API or PeerJS request, skip catch-all logic
+        if (url.includes('/api/') || url.includes('/peerjs')) {
             return next();
         }
 
