@@ -285,6 +285,17 @@ function App() {
     );
   }
 
+  if (window.location.pathname.startsWith('/share/')) {
+    return (
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <FileShare />
+        </ThemeProvider>
+      </StyledEngineProvider>
+    );
+  }
+
   return (
     <StyledEngineProvider injectFirst>
       <ThemeProvider theme={theme}>
