@@ -313,7 +313,7 @@ const FileUpload: React.FC = () => {
       setLoading(false);
       setUploadProgress(0);
     }
-  }, [file, uploadFile]);
+  }, [file, uploadFile, isP2P, startP2PTransfer]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -11,15 +11,11 @@ import {
 import {
   DownloadDoneOutlined,
   ErrorOutline,
-  SwapHorizontalCircleOutlined,
   BluetoothSearchingOutlined,
 } from '@mui/icons-material';
 import Peer from 'peerjs';
 
 const P2PShare: React.FC = () => {
-  const [peerId, setPeerId] = useState<string>('');
-  const [targetPeerId, setTargetPeerId] = useState<string>('');
-  const [connection, setConnection] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'receiving' | 'completed' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
   const [fileDetails, setFileDetails] = useState<any>(null);
@@ -27,44 +23,23 @@ const P2PShare: React.FC = () => {
   const receivedChunks = useRef<ArrayBuffer[]>([]);
   const peerRef = useRef<Peer | null>(null);
 
-  useEffect(() => {
-    const pathParts = window.location.pathname.split('/');
-    const sessionId = pathParts[pathParts.length - 1];
-    setTargetPeerId(sessionId);
+  const assembleAndDownload = useCallback(() => {
+    if (!fileDetails) return;
+    const blob = new Blob(receivedChunks.current, { type: fileDetails.type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileDetails.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setStatus('completed');
+    setProgress(100);
+  }, [fileDetails]);
 
-    // Initialize Peer
-    const peer = new Peer({
-      host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com', // Replace with your backend domain if using PeerServer there
-      port: window.location.hostname === 'localhost' ? 9000 : 443,
-      path: '/peerjs',
-      secure: window.location.hostname !== 'localhost'
-    });
-
-    peerRef.current = peer;
-
-    peer.on('open', (id) => {
-      setPeerId(id);
-      setStatus('connecting');
-      const conn = peer.connect(sessionId, {
-        reliable: true
-      });
-      setupConnection(conn);
-    });
-
-    peer.on('error', (err) => {
-      console.error('Peer error:', err);
-      setError('Connection failed. Make sure the sender is still online.');
-      setStatus('error');
-    });
-
-    return () => {
-      if (peerRef.current) peerRef.current.destroy();
-    };
-  }, []);
-
-  const setupConnection = (conn: any) => {
+  const setupConnection = useCallback((conn: any) => {
     conn.on('open', () => {
-      setConnection(conn);
       setStatus('receiving');
       conn.send({ type: 'READY' });
     });
@@ -89,21 +64,40 @@ const P2PShare: React.FC = () => {
         setStatus('error');
       }
     });
-  };
+  }, [status, assembleAndDownload]);
 
-  const assembleAndDownload = () => {
-    const blob = new Blob(receivedChunks.current, { type: fileDetails.type });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileDetails.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setStatus('completed');
-    setProgress(100);
-  };
+  useEffect(() => {
+    const pathParts = window.location.pathname.split('/');
+    const sessionId = pathParts[pathParts.length - 1];
+
+    // Initialize Peer
+    const peer = new Peer({
+      host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com', 
+      port: window.location.hostname === 'localhost' ? 9000 : 443,
+      path: '/peerjs',
+      secure: window.location.hostname !== 'localhost'
+    });
+
+    peerRef.current = peer;
+
+    peer.on('open', () => {
+      setStatus('connecting');
+      const conn = peer.connect(sessionId, {
+        reliable: true
+      });
+      setupConnection(conn);
+    });
+
+    peer.on('error', (err) => {
+      console.error('Peer error:', err);
+      setError('Connection failed. Make sure the sender is still online.');
+      setStatus('error');
+    });
+
+    return () => {
+      if (peerRef.current) peerRef.current.destroy();
+    };
+  }, [setupConnection]);
 
   return (
     <Box
