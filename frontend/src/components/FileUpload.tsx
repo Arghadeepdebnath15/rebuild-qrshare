@@ -662,7 +662,7 @@ const FileUpload: React.FC = () => {
           </ButtonGroup>
         </DialogTitle>
         <DialogContent sx={{ textAlign: 'center', p: 0 }}>
-          {qrCode && (
+          {(qrCode || isP2P) && (
             <Fade in timeout={500}>
               <Box sx={{ mt: 2 }}>
                 <Paper
