@@ -112,7 +112,7 @@ app.use('/api', (err, req, res, next) => {
 // PeerJS Signaling Server (Mounted before catch-all)
 const peerServer = ExpressPeerServer(server, {
     debug: true,
-    path: '/'
+    proxied: true
 });
 app.use('/peerjs', peerServer);
 console.log('PeerJS signaling registered on /peerjs');
@@ -127,10 +127,12 @@ if (process.env.NODE_ENV === 'production') {
     app.use(express.static(publicPath));
     app.use(express.static(buildPath));
 
-    // Catch-all route for frontend - MUST come after API routes
+    // Catch-all route for frontend - MUST come after API and PeerJS routes
     app.get('*', (req, res, next) => {
-        // If this is an API request that wasn't caught by previous routes, return 404
-        if (req.url.startsWith('/api/')) {
+        // If this is an API or PeerJS request that wasn't caught, skip catch-all
+        if (req.url.startsWith('/api/') || req.url.startsWith('/peerjs/')) {
+            return next();
+        }
             return res.status(404).json({
                 status: 'error',
                 message: 'API endpoint not found'
