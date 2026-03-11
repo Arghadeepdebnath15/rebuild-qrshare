@@ -172,7 +172,12 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         }
 
         const baseUrl = getBaseUrl(req);
-        const frontendUrl = process.env.FRONTEND_URL || 'https://qrfileshare.web.app';
+        let frontendUrl = process.env.FRONTEND_URL || 'https://qrfileshare.web.app';
+        
+        // Robust check: if we are in production (or not in local dev) and frontendUrl is localhost, force production domain
+        if ((frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) && process.env.NODE_ENV === 'production') {
+            frontendUrl = 'https://qrfileshare.web.app';
+        }
         
         let downloadUrl;
         if (req.body.isPasswordProtected === 'true') {
@@ -326,7 +331,12 @@ router.post('/upload-complete', async (req, res) => {
         }
 
         const baseUrl = getBaseUrl(req);
-        const frontendUrl = process.env.FRONTEND_URL || 'https://qrfileshare.web.app';
+        let frontendUrl = process.env.FRONTEND_URL || 'https://qrfileshare.web.app';
+
+        // Robust check: if we are in production (or not in local dev) and frontendUrl is localhost, force production domain
+        if ((frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) && process.env.NODE_ENV === 'production') {
+            frontendUrl = 'https://qrfileshare.web.app';
+        }
         
         let downloadUrl;
         if (req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true) {
