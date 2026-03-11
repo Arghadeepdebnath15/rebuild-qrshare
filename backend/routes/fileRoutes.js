@@ -831,23 +831,6 @@ router.get('/download/:filename', async (req, res) => {
         // Stream the file
         const fileStream = fs.createReadStream(filePath);
 
-        // When the download completes, delete the file (Burn after read)
-        res.on('finish', async () => {
-            // Only delete if it finished fully
-            if (res.statusCode === 200) {
-                try {
-                    fs.unlinkSync(filePath);
-                    await req.supabase
-                        .from('files')
-                        .delete()
-                        .eq('id', file.id);
-                    console.log(`Auto-deleted file ${file.filename} after successful download.`);
-                } catch (cleanupError) {
-                    console.error('Error auto-deleting file after download:', cleanupError);
-                }
-            }
-        });
-
         fileStream.pipe(res);
     } catch (error) {
         console.error('Download error:', error);
