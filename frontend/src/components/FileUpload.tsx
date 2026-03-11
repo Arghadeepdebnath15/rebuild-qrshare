@@ -213,8 +213,12 @@ const FileUpload: React.FC = () => {
       const CHUNK_SIZE = 16384; // 16KB chunks
 
       const sendNextChunk = () => {
+        // Safety check: ensure the underlying dataChannel is actually there
+        const dc = (conn as any).dataChannel;
+        if (!dc || dc.readyState !== 'open') return;
+
         // Check if data channel buffer is too full
-        if (conn.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+        if (dc.bufferedAmount > MAX_BUFFERED_AMOUNT) {
           // Wait for bufferedamountlow event to continue
           return;
         }
@@ -224,7 +228,7 @@ const FileUpload: React.FC = () => {
           const reader = new FileReader();
           
           reader.onload = (e: any) => {
-            if (conn.open) {
+            if (conn.open && (conn as any).dataChannel?.readyState === 'open') {
               try {
                 conn.send({
                   type: 'CHUNK',
@@ -253,10 +257,15 @@ const FileUpload: React.FC = () => {
         }
       };
 
-      // Listen for buffer low event to resume sending
-      conn.dataChannel.onbufferedamountlow = () => {
-        sendNextChunk();
-      };
+      // Ensure we only touch the dataChannel AFTER the connection is open
+      conn.on('open', () => {
+        const dc = (conn as any).dataChannel;
+        if (dc) {
+          dc.onbufferedamountlow = () => {
+            sendNextChunk();
+          };
+        }
+      });
 
       conn.on('data', (data: any) => {
         if (data.type === 'READY') {
