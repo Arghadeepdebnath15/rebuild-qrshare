@@ -36,16 +36,21 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// PeerJS Signaling Server (MOVED TO TOP)
+// --- PEERJS SIGNALING (HIGHEST PRIORITY) ---
 const peerServer = ExpressPeerServer(server, {
     debug: true,
     proxied: true,
     path: '/'
 });
 app.use('/peerjs', peerServer);
-console.log('PeerJS signaling registered on /peerjs');
+console.log('PeerJS signaling active on /peerjs');
+// --- END PEERJS ---
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// PeerJS Signaling Server MOVED TO TOP
+
 
 // PeerJS reachability check
 app.get('/peerjs/health', (req, res) => res.json({ status: 'ok', service: 'peerjs' }));
