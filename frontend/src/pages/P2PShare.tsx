@@ -20,23 +20,33 @@ const P2PShare: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [fileDetails, setFileDetails] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const statusRef = useRef(status);
   const receivedChunks = useRef<ArrayBuffer[]>([]);
   const peerRef = useRef<Peer | null>(null);
+  const hasDownloaded = useRef(false);
 
-  const assembleAndDownload = useCallback(() => {
-    if (!fileDetails) return;
-    const blob = new Blob(receivedChunks.current, { type: fileDetails.type });
+  // Keep statusRef in sync
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const assembleAndDownload = useCallback((details: any) => {
+    if (!details || hasDownloaded.current) return;
+    hasDownloaded.current = true;
+    
+    const blob = new Blob(receivedChunks.current, { type: details.type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = fileDetails.name;
+    link.download = details.name;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
     setStatus('completed');
     setProgress(100);
-  }, [fileDetails]);
+  }, []);
 
   const setupConnection = useCallback((conn: any) => {
     conn.on('open', () => {
@@ -49,26 +59,33 @@ const P2PShare: React.FC = () => {
         setFileDetails(data.file);
         receivedChunks.current = [];
         setProgress(0);
+        hasDownloaded.current = false;
       } else if (data.type === 'CHUNK') {
         receivedChunks.current.push(data.chunk);
         const percent = Math.round((receivedChunks.current.length / data.totalChunks) * 100);
-        setProgress(percent);
+        setProgress((prev) => Math.max(prev, percent));
       } else if (data.type === 'END') {
-        assembleAndDownload();
+        // Use functional state or local variable to avoid stale closures
+        setFileDetails((prev: any) => {
+          assembleAndDownload(prev);
+          return prev;
+        });
       }
     });
 
     conn.on('close', () => {
-      if (status !== 'completed') {
+      if (statusRef.current !== 'completed') {
         setError('Sender disconnected.');
         setStatus('error');
       }
     });
-  }, [status, assembleAndDownload]);
+  }, [assembleAndDownload]);
 
   useEffect(() => {
     const pathParts = window.location.pathname.split('/');
     const sessionId = pathParts[pathParts.length - 1];
+
+    if (!sessionId) return;
 
     const peer = new Peer({
       host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com', 
@@ -94,7 +111,10 @@ const P2PShare: React.FC = () => {
     });
 
     return () => {
-      if (peerRef.current) peerRef.current.destroy();
+      if (peerRef.current) {
+        peerRef.current.destroy();
+        peerRef.current = null;
+      }
     };
   }, [setupConnection]);
 
