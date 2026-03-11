@@ -326,7 +326,7 @@ router.post('/upload-complete', async (req, res) => {
         }
 
         const baseUrl = getBaseUrl(req);
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const frontendUrl = process.env.FRONTEND_URL || 'https://qrfileshare.web.app';
         
         let downloadUrl;
         if (req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true) {
