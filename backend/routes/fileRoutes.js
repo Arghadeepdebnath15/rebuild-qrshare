@@ -185,7 +185,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
                 path: req.file.path,
                 size: req.file.size,
                 mimetype: req.file.mimetype,
-                qr_code: qrCode
+                qr_code: qrCode,
+                is_password_protected: req.body.isPasswordProtected === 'true',
+                password_hash: req.body.isPasswordProtected === 'true' && req.body.password ? 
+                    await req.securityService.hashPassword(req.body.password) : null
             }])
             .select()
             .single();
@@ -329,7 +332,10 @@ router.post('/upload-complete', async (req, res) => {
                 path: finalPath,
                 size: parseInt(size),
                 mimetype: mimetype || 'application/octet-stream',
-                qr_code: qrCode
+                qr_code: qrCode,
+                is_password_protected: req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true,
+                password_hash: (req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true) && req.body.password ? 
+                    await req.securityService.hashPassword(req.body.password) : null
             }])
             .select()
             .single();
@@ -799,9 +805,10 @@ router.get('/upload-page', (req, res) => {
     res.send(html);
 });
 
-// Download file
-router.get('/download/:filename', async (req, res) => {
+// Verify password for a file
+router.post('/verify-password/:filename', async (req, res) => {
     try {
+        const { password } = req.body;
         const { data: file, error } = await req.supabase
             .from('files')
             .select('*')
@@ -811,6 +818,53 @@ router.get('/download/:filename', async (req, res) => {
         if (error) throw error;
         if (!file) {
             return res.status(404).json({ message: 'File not found' });
+        }
+
+        if (!file.is_password_protected) {
+            return res.json({ valid: true });
+        }
+
+        const passwordHash = await req.securityService.hashPassword(password);
+        if (passwordHash === file.password_hash) {
+            res.json({ valid: true });
+        } else {
+            res.status(401).json({ valid: false, message: 'Invalid password' });
+        }
+    } catch (error) {
+        console.error('Password verification error:', error);
+        res.status(500).json({ message: 'Error verifying password' });
+    }
+});
+
+// Download file
+router.get('/download/:filename', async (req, res) => {
+    try {
+        const { token, password } = req.query;
+        const { data: file, error } = await req.supabase
+            .from('files')
+            .select('*')
+            .eq('filename', req.params.filename)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!file) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        // Check password if protected
+        if (file.is_password_protected) {
+            const providedPassword = password || token; // Support both for flexibility
+            if (!providedPassword) {
+                return res.status(403).json({ 
+                    message: 'Password required', 
+                    requiresPassword: true 
+                });
+            }
+
+            const passwordHash = await req.securityService.hashPassword(providedPassword);
+            if (passwordHash !== file.password_hash) {
+                return res.status(401).json({ message: 'Invalid password' });
+            }
         }
 
         const filePath = path.join(uploadsDir, file.filename);
@@ -824,9 +878,12 @@ router.get('/download/:filename', async (req, res) => {
             .update({ download_count: (file.download_count || 0) + 1 })
             .eq('id', file.id);
 
-        // Set proper content type
-        res.setHeader('Content-Type', file.mimetype);
+        // Set proper content type and headers for iPad/iOS download compatibility
+        // Using application/octet-stream forces a download instead of a preview
+        res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
         // Stream the file
         const fileStream = fs.createReadStream(filePath);

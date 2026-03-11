@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const fileRoutes = require('./routes/fileRoutes');
+const SecurityService = require('./services/SecurityService');
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const securityService = new SecurityService();
 
 // Middleware
 app.use(cors({
@@ -42,6 +44,7 @@ app.use((req, res, next) => {
 // Attach supabase to req for use in routes
 app.use((req, res, next) => {
     req.supabase = supabase;
+    req.securityService = securityService;
     next();
 });
 

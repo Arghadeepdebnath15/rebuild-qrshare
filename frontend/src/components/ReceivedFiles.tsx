@@ -246,7 +246,7 @@ const ReceivedFiles: React.FC = () => {
     }
   };
 
-  const verifyPassword = async (file: FileInfo, password: string): Promise<string> => {
+  const verifyPassword = async (file: FileInfo, password: string): Promise<boolean> => {
     const response = await fetch(`${API_URL}/api/files/verify-password/${file.filename}`, {
       method: 'POST',
       headers: {
@@ -256,19 +256,16 @@ const ReceivedFiles: React.FC = () => {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to verify password');
+        if (response.status === 401) return false;
+        throw new Error('Failed to verify password');
     }
 
     const data = await response.json();
-    if (!data.valid) {
-      throw new Error(data.message || 'Invalid password');
-    }
-
-    return file.id;
+    return data.valid;
   };
 
-  const downloadFile = async (file: FileInfo, verificationToken?: string) => {
-    const downloadUrl = `${API_URL}/api/files/download/${file.filename}${verificationToken ? `?token=${verificationToken}` : ''
+  const downloadFile = async (file: FileInfo, password?: string) => {
+    const downloadUrl = `${API_URL}/api/files/download/${file.filename}${password ? `?password=${encodeURIComponent(password)}` : ''
       }`;
 
     const response = await fetch(downloadUrl, {
@@ -328,10 +325,15 @@ const ReceivedFiles: React.FC = () => {
 
     try {
       // First verify the password
-      const verificationToken = await verifyPassword(file, password);
+      const isValid = await verifyPassword(file, password);
+      
+      if (!isValid) {
+          setPasswordError('Invalid password. Please try again.');
+          return;
+      }
 
       // If password is valid, proceed with download
-      await downloadFile(file, verificationToken);
+      await downloadFile(file, password);
 
       // Clear password dialog
       setPasswordDialog({ open: false, fileId: '', filename: '' });
@@ -339,7 +341,7 @@ const ReceivedFiles: React.FC = () => {
       setPasswordError('');
     } catch (err) {
       console.error('Download error:', err);
-      setPasswordError(err instanceof Error ? err.message : 'Invalid password. Please try again.');
+      setPasswordError(err instanceof Error ? err.message : 'Error verifying password. Please try again.');
     }
   };
 
