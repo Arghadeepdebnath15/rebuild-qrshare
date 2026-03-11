@@ -207,63 +207,75 @@ const FileUpload: React.FC = () => {
     });
 
     peer.on('connection', (conn) => {
-      // Set up backpressure handling
-      const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64KB threshold
-      let offset = 0;
-      const CHUNK_SIZE = 16384; // 16KB chunks
+      const MAX_BUFFERED_AMOUNT = 1024 * 1024; // 1MB buffer limit
+      const CHUNK_SIZE = 65536; // 64KB chunks
+      let isTransferring = false;
 
-      const sendNextChunk = () => {
-        const dc = (conn as any).dataChannel;
-        if (!dc || dc.readyState !== 'open') return;
+      const waitForBufferEmpty = () => {
+        return new Promise<void>((resolve) => {
+          const dc = (conn as any).dataChannel;
+          if (!dc || dc.bufferedAmount <= MAX_BUFFERED_AMOUNT / 2) {
+            resolve();
+            return;
+          }
 
-        // Check if data channel buffer is too full
-        if (dc.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-          return; // Will be resumed by onbufferedamountlow
-        }
-
-        if (offset < file.size) {
-          const slice = file.slice(offset, offset + CHUNK_SIZE);
-          const reader = new FileReader();
-          
-          reader.onload = (e: any) => {
-            if (conn.open && (conn as any).dataChannel?.readyState === 'open') {
-              try {
-                conn.send({
-                  type: 'CHUNK',
-                  chunk: e.target.result,
-                  totalChunks: Math.ceil(file.size / CHUNK_SIZE)
-                });
-                offset += e.target.result.byteLength;
-                
-                const progress = Math.round((offset / file.size) * 100);
-                setUploadProgress(progress);
-
-                // Small async break to avoid starving the main thread
-                setTimeout(sendNextChunk, 0);
-              } catch (sendErr) {
-                console.error('P2P Send Error:', sendErr);
-                setError({ show: true, message: 'Transfer lost connection.', severity: 'error' });
-              }
-            }
+          const onLow = () => {
+            dc.removeEventListener('bufferedamountlow', onLow);
+            resolve();
           };
-          reader.readAsArrayBuffer(slice);
-        } else {
-          conn.send({ type: 'END' });
-          setTimeout(() => {
-            setError({ show: true, message: 'Transfer completed successfully!', severity: 'success' });
-          }, 1000);
+          dc.addEventListener('bufferedamountlow', onLow);
+          // Safety timeout to prevent getting stuck
+          setTimeout(resolve, 100);
+        });
+      };
+
+      const startStreaming = async () => {
+        if (isTransferring) return;
+        isTransferring = true;
+        
+        try {
+          let offset = 0;
+          const totalSize = file.size;
+          const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+
+          while (offset < totalSize && conn.open) {
+            // Respect backpressure
+            await waitForBufferEmpty();
+
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            const chunk = await slice.arrayBuffer();
+            
+            if (conn.open) {
+              conn.send({
+                type: 'CHUNK',
+                chunk: chunk,
+                totalChunks: totalChunks
+              });
+              
+              offset += chunk.byteLength;
+              const progress = Math.round((offset / totalSize) * 100);
+              setUploadProgress(progress);
+            }
+          }
+
+          if (conn.open) {
+            conn.send({ type: 'END' });
+            setTimeout(() => {
+              setError({ show: true, message: 'Transfer completed successfully!', severity: 'success' });
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('Streaming error:', err);
+          setError({ show: true, message: 'Transfer error. Please try again.', severity: 'error' });
+        } finally {
+          isTransferring = false;
         }
       };
 
-      // Ensure we only touch the dataChannel AFTER the connection is open
       conn.on('open', () => {
         const dc = (conn as any).dataChannel;
         if (dc) {
-          // Explicitly set threshold for bufferedamountlow event
           dc.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
-          dc.onbufferedamountlow = () => {
-            sendNextChunk();
-          };
         }
       });
 
@@ -279,12 +291,12 @@ const FileUpload: React.FC = () => {
             }
           });
 
-          // Start the flow-controlled transmission
-          offset = 0;
-          sendNextChunk();
+          // Begin streaming
+          startStreaming();
         }
       });
     });
+
 
     peer.on('error', (err) => {
       console.error('P2P Error:', err);
