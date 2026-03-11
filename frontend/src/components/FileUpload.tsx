@@ -213,14 +213,12 @@ const FileUpload: React.FC = () => {
       const CHUNK_SIZE = 16384; // 16KB chunks
 
       const sendNextChunk = () => {
-        // Safety check: ensure the underlying dataChannel is actually there
         const dc = (conn as any).dataChannel;
         if (!dc || dc.readyState !== 'open') return;
 
         // Check if data channel buffer is too full
         if (dc.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-          // Wait for bufferedamountlow event to continue
-          return;
+          return; // Will be resumed by onbufferedamountlow
         }
 
         if (offset < file.size) {
@@ -240,11 +238,11 @@ const FileUpload: React.FC = () => {
                 const progress = Math.round((offset / file.size) * 100);
                 setUploadProgress(progress);
 
-                // Continue sending unless buffer is now full
-                sendNextChunk();
+                // Small async break to avoid starving the main thread
+                setTimeout(sendNextChunk, 0);
               } catch (sendErr) {
                 console.error('P2P Send Error:', sendErr);
-                setError({ show: true, message: 'Transfer failed. Connection unstable.', severity: 'error' });
+                setError({ show: true, message: 'Transfer lost connection.', severity: 'error' });
               }
             }
           };
@@ -261,6 +259,8 @@ const FileUpload: React.FC = () => {
       conn.on('open', () => {
         const dc = (conn as any).dataChannel;
         if (dc) {
+          // Explicitly set threshold for bufferedamountlow event
+          dc.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
           dc.onbufferedamountlow = () => {
             sendNextChunk();
           };
