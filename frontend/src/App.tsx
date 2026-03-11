@@ -21,6 +21,7 @@ import UploadedFiles from './components/UploadedFiles';
 import ReceivedFiles from './components/ReceivedFiles';
 import Blog from './components/Blog';
 import MobileUpload from './components/MobileUpload';
+import FileShare from './pages/FileShare';
 
 // Add Poppins font
 const poppinsFont = document.createElement('link');
@@ -264,6 +265,17 @@ function App() {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <MobileUpload />
+        </ThemeProvider>
+      </StyledEngineProvider>
+    );
+  }
+
+  if (window.location.pathname.startsWith('/share/')) {
+    return (
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <FileShare />
         </ThemeProvider>
       </StyledEngineProvider>
     );

@@ -172,7 +172,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         }
 
         const baseUrl = getBaseUrl(req);
-        const downloadUrl = `${baseUrl}/api/files/download/${req.file.filename}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        
+        let downloadUrl;
+        if (req.body.isPasswordProtected === 'true') {
+            downloadUrl = `${frontendUrl}/share/${req.file.filename}`;
+        } else {
+            downloadUrl = `${baseUrl}/api/files/download/${req.file.filename}`;
+        }
 
         // Generate QR code
         const qrCode = await QRCode.toDataURL(downloadUrl);
@@ -319,7 +326,14 @@ router.post('/upload-complete', async (req, res) => {
         }
 
         const baseUrl = getBaseUrl(req);
-        const downloadUrl = `${baseUrl}/api/files/download/${finalFilename}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        
+        let downloadUrl;
+        if (req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true) {
+            downloadUrl = `${frontendUrl}/share/${finalFilename}`;
+        } else {
+            downloadUrl = `${baseUrl}/api/files/download/${finalFilename}`;
+        }
 
         // Generate QR code
         const qrCode = await QRCode.toDataURL(downloadUrl);
