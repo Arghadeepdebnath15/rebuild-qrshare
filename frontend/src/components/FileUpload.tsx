@@ -191,7 +191,7 @@ const FileUpload: React.FC = () => {
     const peer = new Peer({
       host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com',
       port: window.location.hostname === 'localhost' ? 5055 : 443,
-      path: '/peerjs',
+      path: '/',
       secure: window.location.hostname !== 'localhost'
     });
 

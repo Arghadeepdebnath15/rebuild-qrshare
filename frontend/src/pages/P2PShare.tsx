@@ -70,11 +70,10 @@ const P2PShare: React.FC = () => {
     const pathParts = window.location.pathname.split('/');
     const sessionId = pathParts[pathParts.length - 1];
 
-    // Initialize Peer
     const peer = new Peer({
       host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com', 
       port: window.location.hostname === 'localhost' ? 5055 : 443,
-      path: '/peerjs',
+      path: '/',
       secure: window.location.hostname !== 'localhost'
     });
 
