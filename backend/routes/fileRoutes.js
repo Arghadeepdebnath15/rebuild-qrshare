@@ -185,7 +185,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
                 path: req.file.path,
                 size: req.file.size,
                 mimetype: req.file.mimetype,
-                qr_code: qrCode
+                qr_code: qrCode,
+                is_password_protected: req.body.isPasswordProtected === 'true',
+                password_hash: req.body.isPasswordProtected === 'true' && req.body.password ? 
+                    await req.securityService.hashPassword(req.body.password) : null
             }])
             .select()
             .single();
@@ -329,7 +332,10 @@ router.post('/upload-complete', async (req, res) => {
                 path: finalPath,
                 size: parseInt(size),
                 mimetype: mimetype || 'application/octet-stream',
-                qr_code: qrCode
+                qr_code: qrCode,
+                is_password_protected: req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true,
+                password_hash: (req.body.isPasswordProtected === 'true' || req.body.isPasswordProtected === true) && req.body.password ? 
+                    await req.securityService.hashPassword(req.body.password) : null
             }])
             .select()
             .single();
