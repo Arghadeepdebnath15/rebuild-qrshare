@@ -73,7 +73,7 @@ const P2PShare: React.FC = () => {
     // Initialize Peer
     const peer = new Peer({
       host: window.location.hostname === 'localhost' ? 'localhost' : 'qr-file-backend.onrender.com', 
-      port: window.location.hostname === 'localhost' ? 9000 : 443,
+      port: window.location.hostname === 'localhost' ? 5055 : 443,
       path: '/peerjs',
       secure: window.location.hostname !== 'localhost'
     });

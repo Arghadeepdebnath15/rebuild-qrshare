@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fileRoutes = require('./routes/fileRoutes');
 const SecurityService = require('./services/SecurityService');
-const { PeerServer } = require('peer');
+const { ExpressPeerServer } = require('peer');
 
 dotenv.config();
 
@@ -182,19 +182,20 @@ const getLocalIp = () => {
 
 const localIp = getLocalIp();
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Local access: http://localhost:${PORT}`);
     console.log(`WiFi access: http://${localIp}:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
     // --- PEERJS SIGNALING SERVER ---
-    const peerServer = PeerServer({ 
-        port: 9000, 
-        path: '/peerjs',
-        proxied: true 
+    const peerServer = ExpressPeerServer(server, {
+        debug: true,
+        path: '/'
     });
-    console.log('PeerJS server is running on port 9000');
+    
+    app.use('/peerjs', peerServer);
+    console.log('PeerJS signaling active on /peerjs');
     
     console.log('\nAvailable endpoints:');
     console.log(`- GET http://localhost:${PORT}/api/health`);
