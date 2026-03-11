@@ -38,6 +38,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// PeerJS Signaling Server (MOVED TO TOP)
+const peerServer = ExpressPeerServer(server, {
+    debug: true,
+    proxied: true,
+    path: '/'
+});
+app.use('/peerjs', peerServer);
+console.log('PeerJS signaling registered on /peerjs');
+
+// PeerJS reachability check
+app.get('/peerjs/health', (req, res) => res.json({ status: 'ok', service: 'peerjs' }));
+
 // Request logging middleware
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url}`);
@@ -109,13 +121,8 @@ app.use('/api', (err, req, res, next) => {
     });
 });
 
-// PeerJS Signaling Server
-const peerServer = ExpressPeerServer(server, {
-    debug: true,
-    proxied: true
-});
-app.use('/peerjs', peerServer);
-console.log('PeerJS signaling registered on path /peerjs');
+// PeerJS Signaling Server MOVED ABOVE
+
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
@@ -130,7 +137,7 @@ if (process.env.NODE_ENV === 'production') {
     // Catch-all route for frontend - MUST come after API and PeerJS routes
     app.get('*', (req, res, next) => {
         // FAIL-SAFE: If this is an API or PeerJS request, skip catch-all
-        if (req.path.includes('/api/') || req.path.includes('/peerjs') || req.url.includes('/peerjs')) {
+        if (req.path.startsWith('/api/') || req.path.startsWith('/peerjs')) {
             return next();
         }
 
