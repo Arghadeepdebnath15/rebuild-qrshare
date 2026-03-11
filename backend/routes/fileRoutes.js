@@ -31,20 +31,6 @@ const upload = multer({
     preservePath: true,
     limits: {
         fileSize: 1024 * 1024 * 1024, // 1GB limit
-    },
-    fileFilter: function (req, file, cb) {
-        // List of allowed file types
-        const filetypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|zip|rar|txt|mp3|mp4|mov|avi|wav|psd|ai|eps|svg|webp|ico|json|js|css|html|xml|csv|ppt|pptx|odt|ods|odp|7z|tar|gz|bz2|tiff|bmp|rtf|ogg|webm|m4a|wma|aac|flac|mkv|wmv|mpg|mpeg|3gp|py|java|cpp|h|c|sql|md|yml|yaml|conf|ini|sh|bat|ps1|log/;
-
-        // Check both mimetype and file extension
-        const mimetype = filetypes.test(file.mimetype.toLowerCase());
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-
-        if (mimetype || extname) {
-            return cb(null, true);
-        }
-
-        cb(new Error(`File type '${path.extname(file.originalname).toLowerCase()}' is not supported. Supported file types: ${filetypes.toString().replace(/\//g, '')}`));
     }
 });
 
