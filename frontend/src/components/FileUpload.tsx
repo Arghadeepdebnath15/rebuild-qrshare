@@ -60,12 +60,8 @@ const FileUpload: React.FC = () => {
       return `File size exceeds ${CONFIG.MAX_FILE_SIZE / (1024 * 1024)}MB limit`;
     }
 
-    const fileType = file.type || '';
-    const isAllowed = CONFIG.ALLOWED_FILE_TYPES.some(type =>
-      type.endsWith('/*') ? fileType.startsWith(type.replace('/*', '/')) : type === fileType
-    );
-
-    return isAllowed ? null : 'File type not allowed';
+    // All file types are now allowed (APK, AAB, etc. supported)
+    return null;
   }, []);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
