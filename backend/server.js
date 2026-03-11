@@ -129,10 +129,8 @@ if (process.env.NODE_ENV === 'production') {
 
     // Catch-all route for frontend - MUST come after API and PeerJS routes
     app.get('*', (req, res, next) => {
-        const url = req.originalUrl || req.url;
-        
-        // If this is an API or PeerJS request, skip catch-all logic
-        if (url.includes('/api/') || url.includes('/peerjs')) {
+        // FAIL-SAFE: If this is an API or PeerJS request, skip catch-all
+        if (req.path.includes('/api/') || req.path.includes('/peerjs') || req.url.includes('/peerjs')) {
             return next();
         }
 
@@ -145,6 +143,11 @@ if (process.env.NODE_ENV === 'production') {
         } else if (require('fs').existsSync(buildIndexPath)) {
             res.sendFile(buildIndexPath);
         } else {
+            // If it's a PeerJS request that reached here, something is wrong, but don't return 503
+            if (req.url.includes('/peerjs')) {
+                return res.status(404).send('PeerJS signaling endpoint not found');
+            }
+
             res.status(503).json({
                 message: 'Application is starting up. If this persists, please contact support.',
                 details: process.env.NODE_ENV === 'development' ? 'Frontend build not found at: ' + publicPath : undefined
