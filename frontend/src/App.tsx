@@ -271,9 +271,6 @@ function App() {
     );
   }
 
-    );
-  }
-
   if (window.location.pathname.startsWith('/p2p/')) {
     return (
       <StyledEngineProvider injectFirst>
