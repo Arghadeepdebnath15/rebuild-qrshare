@@ -207,6 +207,57 @@ const FileUpload: React.FC = () => {
     });
 
     peer.on('connection', (conn) => {
+      // Set up backpressure handling
+      const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64KB threshold
+      let offset = 0;
+      const CHUNK_SIZE = 16384; // 16KB chunks
+
+      const sendNextChunk = () => {
+        // Check if data channel buffer is too full
+        if (conn.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+          // Wait for bufferedamountlow event to continue
+          return;
+        }
+
+        if (offset < file.size) {
+          const slice = file.slice(offset, offset + CHUNK_SIZE);
+          const reader = new FileReader();
+          
+          reader.onload = (e: any) => {
+            if (conn.open) {
+              try {
+                conn.send({
+                  type: 'CHUNK',
+                  chunk: e.target.result,
+                  totalChunks: Math.ceil(file.size / CHUNK_SIZE)
+                });
+                offset += e.target.result.byteLength;
+                
+                const progress = Math.round((offset / file.size) * 100);
+                setUploadProgress(progress);
+
+                // Continue sending unless buffer is now full
+                sendNextChunk();
+              } catch (sendErr) {
+                console.error('P2P Send Error:', sendErr);
+                setError({ show: true, message: 'Transfer failed. Connection unstable.', severity: 'error' });
+              }
+            }
+          };
+          reader.readAsArrayBuffer(slice);
+        } else {
+          conn.send({ type: 'END' });
+          setTimeout(() => {
+            setError({ show: true, message: 'Transfer completed successfully!', severity: 'success' });
+          }, 1000);
+        }
+      };
+
+      // Listen for buffer low event to resume sending
+      conn.dataChannel.onbufferedamountlow = () => {
+        sendNextChunk();
+      };
+
       conn.on('data', (data: any) => {
         if (data.type === 'READY') {
           // Send file metadata
@@ -219,39 +270,9 @@ const FileUpload: React.FC = () => {
             }
           });
 
-          // Stream file
-          const CHUNK_SIZE = 16384; // 16KB chunks
-          const reader = new FileReader();
-          let offset = 0;
-
-          reader.onload = (e: any) => {
-            conn.send({
-              type: 'CHUNK',
-              chunk: e.target.result,
-              totalChunks: Math.ceil(file.size / CHUNK_SIZE)
-            });
-            offset += e.target.result.byteLength;
-            
-            const progress = Math.round((offset / file.size) * 100);
-            setUploadProgress(progress);
-
-            if (offset < file.size) {
-              readNext();
-            } else {
-              conn.send({ type: 'END' });
-              // Small delay before marking success
-              setTimeout(() => {
-                setError({ show: true, message: 'Transfer completed successfully!', severity: 'success' });
-              }, 1000);
-            }
-          };
-
-          const readNext = () => {
-             const slice = file.slice(offset, offset + CHUNK_SIZE);
-             reader.readAsArrayBuffer(slice);
-          };
-
-          readNext();
+          // Start the flow-controlled transmission
+          offset = 0;
+          sendNextChunk();
         }
       });
     });
